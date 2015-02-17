@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 var autoPush = require('../index.js');
 
 var fromPort = process.argv[2];
