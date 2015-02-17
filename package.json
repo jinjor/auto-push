@@ -1,0 +1,25 @@
+{
+  "name": "auto-push",
+  "version": "1.0.0",
+  "description": "Experimental HTTP/2 (proxy) server that automatically pushes sub-resources of HTML",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-simple-http2": "git+https://github.com/jinjor/node-simple-http2.git#232fcfe",
+    "htmlparser2": "^3.8.2",
+    "request": "^2.53.0"
+  },
+  "bin":  "./bin/auto-push",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jinjor/auto-push.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jinjor/auto-push/issues"
+  },
+  "homepage": "https://github.com/jinjor/auto-push"
+}

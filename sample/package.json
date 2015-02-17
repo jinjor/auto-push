@@ -1,0 +1,16 @@
+{
+  "name": "sample2",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "compression": "^1.4.0",
+    "express": "^4.11.2"
+  },
+  "devDependencies": {}
+}
