@@ -5,13 +5,15 @@ var request = require('request');
 var zlib = require('zlib');
 var fs = require('fs');
 
-var parse = function(html, onScript, onStyle) {
+var parse = function(html, onResource) {
   var parser = new htmlparser2.Parser({
     onopentag: function(name, attribs) {
-      if (name === "script") {
-        onScript(attribs.src);
+      if (name === "script" && attribs.src) {
+        onResource(attribs.src);
       } else if (name === "link" && attribs.rel === "stylesheet") {
-        onStyle(attribs.href);
+        onResource(attribs.href);
+      } else if (name === "link" && attribs.rel === "import") {
+        onResource(attribs.href);
       }
     }
   });
@@ -28,7 +30,10 @@ function proxy(fromPort, toPort, tlsOptions) {
 
   http2.createServer(tlsOptions, function(req, res) {
     var method = req.method;
-    var path = req.url;
+    var url = req.url;
+
+    // TODO: あやしい
+    var fullURL = url.indexOf('http') === 0 ? url : 'http://localhost:' + toPort + url;
 
     var headers = {};
     Object.keys(req.headers).forEach(function(key) {
@@ -37,17 +42,20 @@ function proxy(fromPort, toPort, tlsOptions) {
       }
     });
 
+    
+    // console.log(headers);
+
     //TODO: Streaming
     request({
-      url: 'http://localhost:' + toPort + path,
+      url: fullURL,
       headers: headers
     }, function(error, response, body) {
       if (error) {
-        console.log(path, error)
+        console.log(url, fullURL, error);
         res.writeHead(500, {});
         res.end();
       } else {
-        // console.log(response.statusCode);
+        console.log(response.statusCode);
         if (response.headers['content-type'].indexOf('html') >= 0) {
           // var encoding = response.headers['content-encoding'];
           // if (encoding === 'gzip') {
@@ -59,9 +67,8 @@ function proxy(fromPort, toPort, tlsOptions) {
 
           // console.log(body);
           parse(body, function(src) {
-            res.pushPromise(src);
-          }, function(href) {
-            res.pushPromise(href);
+            var realURL = src.indexOf('http') === 0 ? src : Path.join('/', src).split('\\').join('/');
+            res.pushPromise(realURL);
           });
         }
 
@@ -74,7 +81,9 @@ function proxy(fromPort, toPort, tlsOptions) {
         res.writeHead(response.statusCode, {
           'content-type': response.headers['content-type'].split(';')[0]
         });
-        res.end(new Buffer(body));
+        var buf = new Buffer(body)
+        console.log(url + ': ' + buf.length);
+        res.end(buf);
       }
     });
   }).listen(fromPort);
