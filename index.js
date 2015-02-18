@@ -37,12 +37,12 @@ function proxy(fromPort, toPort, tlsOptions) {
 
     var headers = {};
     Object.keys(req.headers).forEach(function(key) {
-      if(key[0] !== ':') {
+      if (key[0] !== ':') {
         headers[key] = req.headers[key];
       }
     });
 
-    
+
     // console.log(headers);
 
     //TODO: Streaming
@@ -55,7 +55,7 @@ function proxy(fromPort, toPort, tlsOptions) {
         res.writeHead(500, {});
         res.end();
       } else {
-        console.log(response.statusCode);
+        // console.log(response.statusCode);
         if (response.headers['content-type'].indexOf('html') >= 0) {
           // var encoding = response.headers['content-encoding'];
           // if (encoding === 'gzip') {
@@ -66,15 +66,27 @@ function proxy(fromPort, toPort, tlsOptions) {
           // }
 
           // console.log(body);
-          parse(body, function(src) {
-            var realURL = src.indexOf('http') === 0 ? src : Path.join('/', src).split('\\').join('/');
+          parse(body, function(href) {
+            var realURL;
+            if (href.indexOf('http') === 0) {
+              realURL = href;
+            } else {
+              var array = url.split('/');
+              array.length--;
+              var current = array.join('/');
+              realURL = Path.join(current, href).split('\\').join('/');
+              // console.log(url);
+              // console.log(href);
+              // console.log(current);
+              // console.log(realURL);
+            }
             res.pushPromise(realURL);
           });
         }
 
         var headers = {};
         Object.keys(response.headers).forEach(function(key) {
-          if(key.toLowerCase() !== 'connection') {
+          if (key.toLowerCase() !== 'connection') {
             headers[key.toLowerCase()] = response.headers[key];
           }
         });
@@ -82,7 +94,7 @@ function proxy(fromPort, toPort, tlsOptions) {
           'content-type': response.headers['content-type'].split(';')[0]
         });
         var buf = new Buffer(body)
-        console.log(url + ': ' + buf.length);
+        // console.log(url + ': ' + buf.length);
         res.end(buf);
       }
     });

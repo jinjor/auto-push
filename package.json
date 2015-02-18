@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "node-simple-http2": "git+https://github.com/jinjor/node-simple-http2.git#232fcfe",
+    "node-simple-http2": "git+https://github.com/jinjor/node-simple-http2.git#master",
     "htmlparser2": "^3.8.2",
     "request": "^2.53.0"
   },
