@@ -2,12 +2,11 @@
 
 var autoPush = require('../index.js');
 
-var fromPort = process.argv[2];
-var toPort = process.argv[3];
+// var fromPort = process.argv[2];
+// var toPort = process.argv[3];
 
-if(!fromPort) {
-  throw 'port is required';
-}
+// if(!fromPort) {
+//   throw 'port is required';
+// }
 
-autoPush.proxy(fromPort, toPort);
-autoPush.standAlone(fromPort);
+// autoPush.proxy(fromPort, toPort);
