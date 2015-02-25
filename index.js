@@ -1,39 +1,37 @@
 var Path = require('path');
 var htmlparser2 = require('htmlparser2');
-var request = require('request');
 var fs = require('fs');
 var through2 = require('through2');
-var ecstatic = require('ecstatic');
 var assign = require('object-assign');
+var ecstatic = require('ecstatic');
 
-function createParser(onResource) {
+function createHtmlParser(onResource, onEnd) {
   return new htmlparser2.Parser({
     onopentag: function(name, attribs) {
-      if (name === "script" && attribs.src) {
+      if (name === 'script' && attribs.src) {
         onResource(attribs.src);
-      } else if (name === "link" && attribs.rel === "stylesheet") {
+      } else if (name === 'link' && attribs.rel === 'stylesheet') {
         onResource(attribs.href);
-      } else if (name === "link" && attribs.rel === "import") {
+      } else if (name === 'link' && attribs.rel === 'import') {
         onResource(attribs.href);
+      } else if (name === 'img') {
+        onResource(attribs.src);
       }
-    }
+    },
+    onend: onEnd
   });
 }
 
-var parse = function(filePath, onResource, res) {
-  var parser = createParser(onResource);
-  fs.createReadStream(filePath).pipe(through2(function(chunk, enc, callback) {
-    this.push(chunk);
-    res.write(chunk);
-    callback();
-  })).pipe(parser);
-};
+function createCssParser(onResource) {
+  // TODO: return a Writable Stream
+}
+
 
 function makeRealUrl(baseUrl, resourceUrl) {
   var array = baseUrl.split('/');
   array.length--;
   var baseDir = array.join('/');
-  var realURL = Path.join(baseDir, resourceUrl).split('\\').join('/');
+  var realURL = Path.join('/', baseDir, resourceUrl).split('\\').join('/');
   return realURL;
 }
 
@@ -52,134 +50,41 @@ function handleRequest(middleware, req, res, next, root, url) {
       }
       var realURL = makeRealUrl(url, href);
       var push = res.push(realURL);
-      console.log('pushed: ' + href);
+      console.log('pushed: ' + href + ' as ' + realURL);
 
       req = assign(req, {
         url: realURL,
-        // headers: req.headers
       });
-      // console.log(req.headers['if-modified-since']);
-
       handleRequest(middleware, req, push, next, root, realURL);
     };
     var originalWrite = res.write;
+    var originalWriteHead = res.writeHead;
     var originalEnd = res.end;
 
-    var parser = createParser(onResource);
+    var parser = createHtmlParser(onResource);
 
+    var notModified = false;
     res = assign(res, {
       write: function(data) {
-        if (res._headers['content-type'].indexOf('text/html') >= 0) {
-          parser.write(data);
-        }
+        // console.log('write: ' + url);
+        parser.write(data);
         originalWrite.apply(res, arguments);
       },
       end: function(data) {
+        var _arguments = arguments;
+        originalEnd.apply(res, _arguments);
         console.log('end: ' + url);
-        originalEnd.apply(res, arguments);
       }
     });
-
   }
 
   middleware(req, res, next);
 }
 
-function middleware(root, options) {
-  var middleware = ecstatic.apply(ecstatic, arguments);
-  if (typeof root !== 'string') {
-    options = root;
-    root = options.root;
-  }
+module.exports = function(middleware) {
   return function(req, res, next) {
     var url = req.url;
     console.log(req.method + ' ' + url);
     handleRequest(middleware, req, res, next, root, url);
   };
 }
-
-// function proxy(fromPort, toPort, tlsOptions) {
-
-//   tlsOptions = tlsOptions || {
-//     key: fs.readFileSync(__dirname + '/ssl/key.pem'),
-//     cert: fs.readFileSync(__dirname + '/ssl/cert.pem')
-//   };
-
-//   http2.createServer(tlsOptions, function(req, res) {
-//     var method = req.method;
-//     var url = req.url;
-
-//     // TODO: あやしい
-//     var fullURL = url.indexOf('http') === 0 ? url : 'http://localhost:' + toPort + url;
-
-//     var headers = {};
-//     Object.keys(req.headers).forEach(function(key) {
-//       if (key[0] !== ':') {
-//         headers[key] = req.headers[key];
-//       }
-//     });
-
-
-//     // console.log(headers);
-
-//     //TODO: Streaming
-//     request({
-//       url: fullURL,
-//       headers: headers
-//     }, function(error, response, body) {
-//       if (error) {
-//         console.log(url, fullURL, error);
-//         res.writeHead(500, {});
-//         res.end();
-//       } else {
-//         // console.log(response.statusCode);
-//         if (response.headers['content-type'].indexOf('html') >= 0) {
-//           // var encoding = response.headers['content-encoding'];
-//           // if (encoding === 'gzip') {
-//           //   console.log(body);
-//           //   body = zlib.gunzipSync(new Buffer(body)).toString();
-//           // } else if (encoding === 'deflate') {
-//           //   body = zlib.deflateSync(new Buffer(body)).toString();
-//           // }
-
-//           // console.log(body);
-//           parse(body, function(href) {
-//             var realURL;
-//             if (href.indexOf('http') === 0) {
-//               realURL = href;
-//             } else {
-//               var array = url.split('/');
-//               array.length--;
-//               var current = array.join('/');
-//               realURL = Path.join(current, href).split('\\').join('/');
-//               // console.log(url);
-//               // console.log(href);
-//               // console.log(current);
-//               // console.log(realURL);
-//             }
-//             res.pushPromise(realURL);
-//           });
-//         }
-
-//         var headers = {};
-//         Object.keys(response.headers).forEach(function(key) {
-//           if (key.toLowerCase() !== 'connection') {
-//             headers[key.toLowerCase()] = response.headers[key];
-//           }
-//         });
-//         res.writeHead(response.statusCode, {
-//           'content-type': response.headers['content-type'].split(';')[0]
-//         });
-//         var buf = new Buffer(body)
-//           // console.log(url + ': ' + buf.length);
-//         res.end(buf);
-//       }
-//     });
-//   }).listen(fromPort);
-// };
-
-
-module.exports = {
-  // proxy: proxy,
-  middleware: middleware
-};

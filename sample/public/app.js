@@ -3,13 +3,15 @@ setTimeout(function() {
 	var html = resourceList.map(function(resource) {
 		return resource.name + ': ' + resource.duration + '<br>';
 	}).join('');
-	document.body.innerHTML = html;
-}, 100);
+  var div = document.createElement('div');
+  div.innerHTML = html;
+	document.body.appendChild(div);
+}, 1000);
 
 
 
 var xhr = new XMLHttpRequest();
-xhr.open('GET', 'sample.json', true);
+xhr.open('GET', '/sample.json', true);
 xhr.responseType = 'application/json';
 xhr.onload = function(e) {
   console.log(this.response);
