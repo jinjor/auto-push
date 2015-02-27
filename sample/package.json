@@ -1,5 +1,5 @@
 {
-  "name": "sample2",
+  "name": "sample",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "bunyan": "^1.3.4",
     "ecstatic": "^0.6.0",
     "express": "^4.11.2",
-    "http2": "^3.2.0"
+    "http2": "^3.2.0",
+    "request": "^2.53.0"
   },
   "devDependencies": {}
 }

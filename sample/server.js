@@ -1,9 +1,8 @@
 var fs = require('fs');
 var autoPush = require('../index.js');
-var bunyan = require('bunyan');
 var http2 = require('http2');
 var ecstatic = require('ecstatic');
-var serveStatic = require('serve-static');
+var http = require('http');
 
 var createLogger = function(name) {
   return bunyan.createLogger({
@@ -16,13 +15,14 @@ var createLogger = function(name) {
 
 var options = {
   key: fs.readFileSync(__dirname + '/ssl/key.pem'),
-  cert: fs.readFileSync(__dirname + '/ssl/cert.pem'),
-  // log: createLogger('server'),
-  //     requestCert: true,
-  //   rejectUnauthorized: false,
-  //   NPNProtocols: ['h2-14', 'h2-16', 'http/1.1', 'http/1.0'], //unofficial
+  cert: fs.readFileSync(__dirname + '/ssl/cert.pem')
 };
-// var middleware = ecstatic(__dirname + '/public');
-// var middleware = serveStatic(__dirname + '/public');
 
 http2.createServer(options, autoPush(ecstatic(__dirname + '/public'))).listen(8443);
+
+
+
+// var h1proxy = require('../h1proxy.js');
+// http.createServer(ecstatic(__dirname + '/public')).listen(8080);
+// http2.createServer(options, autoPush(h1proxy(8080))).listen(8443);
+
