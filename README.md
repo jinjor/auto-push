@@ -35,16 +35,22 @@ var autoPush = require('auto-push');
 var http = require('http');
 var ecstatic = require('ecstatic');
 var request = require('request');
+var fs = require('fs');
+var http2 = require('http2');
 
 // server
 http.createServer(ecstatic(__dirname + '/public')).listen(8080);
 
 // proxy
-http2.createServer(autoPush(function(req, res) {
+var options = {
+  key: fs.readFileSync(__dirname + '/ssl/key.pem'),
+  cert: fs.readFileSync(__dirname + '/ssl/cert.pem')
+};
+http2.createServer(options, autoPush(function(req, res) {
   request({
     method: req.method,
     url: 'http://localhost:8080' + req.url,
     headers: req.headers
   }).pipe(res);
-}).listen(8443);
+})).listen(8443);
 ```
