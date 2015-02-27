@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha -t 2000",
-    "prepublish": "test"
+    "prepublish": "npm test"
   },
   "dependencies": {
     "ecstatic": "^0.6.0",
