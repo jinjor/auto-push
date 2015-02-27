@@ -1,10 +1,11 @@
 {
   "name": "auto-push",
-  "version": "1.0.0",
-  "description": "Experimental HTTP/2 middleware that automatically pushes sub-resources of HTML",
+  "version": "0.0.1",
+  "description": "A HTTP/2 middleware that automatically pushes sub-resources of HTML",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha -t 2000",
+    "prepublish": "test"
   },
   "dependencies": {
     "ecstatic": "^0.6.0",
@@ -23,5 +24,9 @@
   "bugs": {
     "url": "https://github.com/jinjor/auto-push/issues"
   },
-  "homepage": "https://github.com/jinjor/auto-push"
+  "homepage": "https://github.com/jinjor/auto-push",
+  "devDependencies": {
+    "mocha": "^2.1.0",
+    "should": "^5.0.1"
+  }
 }

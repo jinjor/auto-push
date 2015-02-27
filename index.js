@@ -5,6 +5,7 @@ var through2 = require('through2');
 var assign = require('object-assign');
 var ecstatic = require('ecstatic');
 var http2 = require('http2');
+var Url = require('url');
 var h1proxy = require('./h1proxy.js');
 // var h2proxy = require('./h2proxy.js');
 
@@ -29,14 +30,6 @@ function createCssParser(onResource) {
   // TODO: return a Writable Stream
 }
 
-
-function makeRealUrl(baseUrl, resourceUrl) {
-  var array = baseUrl.split('/');
-  array.length--;
-  var baseDir = array.join('/');
-  var realURL = Path.join('/', baseDir, resourceUrl).split('\\').join('/');
-  return realURL;
-}
 
 function pipeToParser(res, parser, url) {
   var originalWrite = res.write;
@@ -79,9 +72,6 @@ function pipeToParser(res, parser, url) {
 
 
 function handleRequest(middleware, req, res, next, url) {
-  if (url === '/') {
-    url = 'index.html';
-  }
 
   if (res.push) {
     var onResource = function(href) {
@@ -90,7 +80,7 @@ function handleRequest(middleware, req, res, next, url) {
       } else if (href.indexOf('//') === 0) {
         return;
       }
-      var realURL = makeRealUrl(url, href);
+      var realURL = Url.resolve(url, href);
       var push = res.push(realURL);
       // console.log('pushed: ' + href + ' as ' + realURL);
 
@@ -103,11 +93,9 @@ function handleRequest(middleware, req, res, next, url) {
       handleRequest(middleware, req, push, next, realURL);
     };
 
-    var userAgent = req.headers['user-agent'].toLowerCase();
+    var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
     var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
     var parser = createHtmlParser(onResource, null, enableHtmlImports);
-
-    var notModified = false;
     res = pipeToParser(res, parser, url);
 
   }
@@ -140,5 +128,10 @@ autoPush.h1LocalProxy = function(port) {
 //     }
 //   });
 // };
+
+autoPush.private = {
+  createHtmlParser: createHtmlParser,
+  handleRequest: handleRequest
+};
 
 module.exports = autoPush
