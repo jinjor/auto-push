@@ -34,6 +34,7 @@ http2.createServer(options, autoPush(ecstatic(__dirname + '/public'))).listen(84
 var autoPush = require('auto-push');
 var http = require('http');
 var ecstatic = require('ecstatic');
+var request = require('request');
 
 // server
 http.createServer(ecstatic(__dirname + '/public')).listen(8080);
