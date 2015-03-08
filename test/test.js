@@ -93,6 +93,12 @@ describe('auto-push', function() {
     }, '/', false, done);
   });
 
+  it('should push image2', function(done) {
+    testSingleResource('/', '<img src="/image.png"></img>', {
+      '/image.png': '123'
+    }, '/', false, done);
+  });
+
   it('should resolve url 1', function(done) {
     testSingleResource('/foo/', '<script src="app.js"></script>', {
       '/foo/app.js': 'console.log("hello")'

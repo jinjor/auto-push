@@ -27,11 +27,23 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
 }
 
 function createCssParser(onResource) {
-  // TODO: return a Writable Stream
+  return through2(function(buf, enc, callback) {
+    var str = buf.toString();
+    (str.match(/url\(.*?g"\)/ig) || []).forEach(function(url) {
+      var url = url.split('"')[1];
+      onResource(url);
+    });
+    (str.match(/url\(.*?g'\)/ig) || []).forEach(function(url) {
+      var url = url.split("'")[1];
+      onResource(url);
+    });
+    callback();
+  });
 }
 
 
-function pipeToParser(res, parser, url) {
+function pipeToParser(res, onResource, enableHtmlImports, url) {
+  var parser = null;
   var originalWrite = res.write;
   var originalWriteHead = res.writeHead;
   var originalSetHeader = res.setHeader;
@@ -44,7 +56,7 @@ function pipeToParser(res, parser, url) {
       }
       originalWriteHead.apply(res, arguments);
     },
-    setHeader: function(key) {
+    setHeader: function(key, value) {
       var lowerKey = key.toLowerCase();
       if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
         return;
@@ -56,7 +68,14 @@ function pipeToParser(res, parser, url) {
         // console.log('ignored');
         return;
       }
-      parser.write(data);
+      var contentType = this.getHeader('content-type') || '';
+      if (contentType.indexOf('text/html') >= 0) {
+        parser = parser || createHtmlParser(onResource, null, enableHtmlImports);
+        parser.write(data);
+      } else if (contentType.indexOf('text/css') >= 0) {
+        parser = parser || createCssParser(onResource);
+        // parser.write(data);// has a bug
+      }
       originalWrite.apply(res, arguments);
     },
     end: function(data) {
@@ -72,7 +91,7 @@ function pipeToParser(res, parser, url) {
 
 
 function handleRequest(middleware, req, res, next, url) {
-
+  // console.log(res.push);
   if (res.push) {
     var onResource = function(href) {
       if (href.indexOf('http') === 0) {
@@ -95,8 +114,7 @@ function handleRequest(middleware, req, res, next, url) {
 
     var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
     var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
-    var parser = createHtmlParser(onResource, null, enableHtmlImports);
-    res = pipeToParser(res, parser, url);
+    res = pipeToParser(res, onResource, enableHtmlImports, url);
 
   }
 
