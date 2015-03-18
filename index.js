@@ -74,7 +74,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url) {
         parser.write(data);
       } else if (contentType.indexOf('text/css') >= 0) {
         parser = parser || createCssParser(onResource);
-        // parser.write(data);// has a bug
+        parser.write(data); // has a bug
       }
       originalWrite.apply(res, arguments);
     },
@@ -89,43 +89,69 @@ function pipeToParser(res, onResource, enableHtmlImports, url) {
   });
 }
 
+function createPushRequest(req, newURL) {
+  return assign({}, req, {
+    url: newURL,
+    headers: assign({}, req.headers, {
+      'if-modified-since': null,
+      'if-none-match': null
+    })
+  });
+}
 
-function handleRequest(middleware, req, res, next, url) {
+
+function handleRequest(middleware, req, res, next, url, options) {
   // console.log(res.push);
+  // console.log(url);
   if (res.push) {
-    var onResource = function(href) {
-      if (href.indexOf('http') === 0) {
-        return;
-      } else if (href.indexOf('//') === 0) {
-        return;
-      }
-      var realURL = Url.resolve(url, href);
-      var push = res.push(realURL);
-      // console.log('pushed: ' + href + ' as ' + realURL);
+    if (options.relations[url]) {
+      options.relations[url].forEach(function(href) {
+        var realURL = Url.resolve(url, href);
+        // console.log(realURL);
 
-      req = assign(req, {
-        url: realURL,
-        headers: assign(req.headers, {
-          'if-modified-since': null
-        })
+        var push = res.push(realURL);
+        var pushRequest = createPushRequest(req, realURL);
+        // setTimeout(function(){
+        handleRequest(middleware, pushRequest, push, next, realURL, options);
+        // }, 0);
+
       });
-      handleRequest(middleware, req, push, next, realURL);
-    };
 
-    var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
-    var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
-    res = pipeToParser(res, onResource, enableHtmlImports, url);
+    } else {
+      var onResource = function(href) {
+        if (href.indexOf('http') === 0) {
+          return;
+        } else if (href.indexOf('//') === 0) {
+          return;
+        }
+        var realURL = Url.resolve(url, href);
+        // var _options = {};
+        // _options.protocol = 'https:'
+        // _options.host = req.headers.host;
+        // _options.path = realURL;
+        // var push = res.push(_options);
+        var push = res.push(realURL);
+        // console.log('pushed: ' + href + ' as ' + realURL);
 
+        var pushRequest = createPushRequest(req, realURL);
+        handleRequest(middleware, pushRequest, push, next, realURL, options);
+      };
+
+      var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
+      var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
+      res = pipeToParser(res, onResource, enableHtmlImports, url);
+    }
   }
-
   middleware(req, res, next);
 }
 
-var autoPush = function(middleware) {
+var autoPush = function(middleware, options) {
+  options = assign({
+    relations: {}
+  }, options || {});
   return function(req, res, next) {
     var url = req.url;
-    // console.log(req.method + ' ' + url);
-    handleRequest(middleware, req, res, next, url);
+    handleRequest(middleware, req, res, next, url, options);
   };
 };
 autoPush.static = function(root) {
