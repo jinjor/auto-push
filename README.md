@@ -1,4 +1,7 @@
 # auto-push
+[![Build Status](https://travis-ci.org/jinjor/auto-push.svg?branch=master)](https://travis-ci.org/jinjor/auto-push)
+[![Coverage Status](https://coveralls.io/repos/jinjor/auto-push/badge.svg?branch=master)](https://coveralls.io/r/jinjor/auto-push?branch=master)
+
 A HTTP/2 middleware for Node.js that automatically parse HTML and push its sub-resouces to the client.
 
 It wraps a middleware and create new one, where a middleware is a function like
