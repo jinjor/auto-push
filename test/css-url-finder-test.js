@@ -1,12 +1,13 @@
 var assert = require('assert');
 var fs = require('fs');
+var stream = require('stream');
 var CssUrlFinder = require('../css-url-finder.js');
 require('should');
 
 
 describe('css-url-finder', function() {
 
-  it('works', function(done) {
+  it('should read stream', function(done) {
     var url = '';
     fs.createReadStream('test/assets/1.css').pipe(new CssUrlFinder()).on('data', function(_url) {
       url = _url.toString();
@@ -15,5 +16,48 @@ describe('css-url-finder', function() {
       done();
     });
   });
+
+  it('should parse css 1', function(done) {
+    assertSingle('body { background: url("foo/bar-_0123ABC.png"); }', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should works css 2', function(done) {
+    assertSingle('body { background: url(\'foo/bar-_0123ABC.png\'); }', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should works css 3', function(done) {
+    assertSingle('body { background: url(foo/bar-_0123ABC.png); }', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should works css 4', function(done) {
+    assertSingle('body { background: url ( "foo/bar-_0123ABC.png" ) ; }', 'foo/bar-_0123ABC.png', done);
+  });
+
+  it('should read separated url', function(done) {
+    var url = '';
+    var s = new stream.Readable();
+    s._read = function noop() {};
+    s.pipe(new CssUrlFinder()).on('data', function(_url) {
+      url = _url.toString();
+    }).on('end', function() {
+      url.should.equal('foo/bar-_0123ABC.png');
+      done();
+    });
+    s.push('body { background: url("fo');
+    s.push('o/bar-_0123ABC.png"); }');
+    s.push(null);
+  });
+
+  function assertSingle(line, expectedUrl, done) {
+    var url = '';
+    var s = new stream.Readable();
+    s._read = function noop() {};
+    s.pipe(new CssUrlFinder()).on('data', function(_url) {
+      url = _url.toString();
+    }).on('end', function() {
+      url.should.equal(expectedUrl);
+      done();
+    });
+    s.push(line);
+    s.push(null);
+  }
+
 
 });

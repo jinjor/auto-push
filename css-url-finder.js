@@ -14,7 +14,7 @@ function getUrl(line) {
   if (!url) {
     return null;
   }
-  return url.replace(/"/g, '').replace(/'/g, '');
+  return url.replace(/"/g, '').replace(/'/g, '').trim();
 }
 
 function CssUrlFinder(options) {

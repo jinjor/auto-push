@@ -118,7 +118,7 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
       var promises = options.relations[url].map(function(href) {
         var realURL = Url.resolve(url, href);
 
-        // console.log('pushed: ' + realURL);
+        log('pushed: ' + realURL);
         var push = originalRes.push(realURL);
 
         var pushRequest = createPushRequest(req, realURL);
@@ -158,7 +158,7 @@ var autoPush = function(middleware, options) {
   options = assign({
     relations: {}
   }, options || {});
-  
+
   var debug = false;
   var log = debug ? console.log.bind(console) : function() {};
 
