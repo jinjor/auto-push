@@ -1,5 +1,5 @@
 # auto-push
-A HTTP/2 middleware that automatically parse HTML and push its sub-resouces to the client.
+A HTTP/2 middleware for Node.js that automatically parse HTML and push its sub-resouces to the client.
 
 It wraps a middleware and create new one, where a middleware is a function like
 
