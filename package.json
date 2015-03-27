@@ -16,8 +16,14 @@
     "type": "git",
     "url": "https://github.com/jinjor/auto-push.git"
   },
-  "author": "",
+  "author": "Yosuke Torii",
   "license": "MIT",
+  "keywords": [
+    "http",
+    "http2",
+    "middleware",
+    "push"
+  ],
   "bugs": {
     "url": "https://github.com/jinjor/auto-push/issues"
   },
