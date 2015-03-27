@@ -6,6 +6,7 @@ var assign = require('object-assign');
 var ecstatic = require('ecstatic');
 var http2 = require('http2');
 var Url = require('url');
+var assert = require('assert');
 var h1proxy = require('./h1proxy.js');
 var CssUrlFinder = require('./css-url-finder.js');
 
@@ -112,6 +113,7 @@ function push(middleware, req, originalRes, next, options, url, href, log, pushe
     log('pushed: ' + realURL);
     var push = originalRes.push(realURL);
     var pushRequest = createPushRequest(req, realURL);
+    // assert(pushRequest.url === realURL);
     pushed[realURL] = true;
     return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
   } else {
@@ -119,6 +121,10 @@ function push(middleware, req, originalRes, next, options, url, href, log, pushe
   }
 }
 
+function canHtmlImports(req) {
+  var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
+  return userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
+}
 
 function handleRequest(middleware, req, originalRes, res, next, url, options, log, pushed) {
   if (!originalRes.push) {
@@ -141,9 +147,7 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         }
         return push(middleware, req, originalRes, next, options, url, href, log, pushed);
       };
-      var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
-      var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
-      var newRes = pipeToParser(res, onResource, enableHtmlImports, url, resolve, log);
+      var newRes = pipeToParser(res, onResource, canHtmlImports(req), url, resolve, log);
       middleware(req, newRes, next);
     }
   });
