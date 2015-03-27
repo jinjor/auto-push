@@ -5,15 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "istanbul cover ./node_modules/mocha/bin/_mocha test/",
-    "prepublish": "npm test",
     "coveralls": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
   "dependencies": {
-    "ecstatic": "^0.7.0",
     "htmlparser2": "^3.8.2",
-    "http2": "^3.2.0",
     "object-assign": "^2.0.0",
-    "request": "^2.53.0",
     "through2": "^0.6.3"
   },
   "repository": {
@@ -28,6 +24,7 @@
   "homepage": "https://github.com/jinjor/auto-push",
   "devDependencies": {
     "coveralls": "^2.11.2",
+    "http2": "^3.2.0",
     "istanbul": "^0.3.11",
     "mocha": "^2.1.0",
     "should": "^5.0.1"
