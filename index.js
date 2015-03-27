@@ -106,23 +106,29 @@ function createPushRequest(req, newURL) {
   });
 }
 
+function push(middleware, req, originalRes, next, options, url, href, log, pushed) {
+  var realURL = Url.resolve(url, href);
+  if(!pushed[realURL]) {
+    log('pushed: ' + realURL);
+    var push = originalRes.push(realURL);
+    var pushRequest = createPushRequest(req, realURL);
+    pushed[realURL] = true;
+    return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
+  } else {
+    return Promise.resolve();
+  }
+}
 
-function handleRequest(middleware, req, originalRes, res, next, url, options, log) {
+
+function handleRequest(middleware, req, originalRes, res, next, url, options, log, pushed) {
   if (!originalRes.push) {
     middleware(req, res, next);
     return Promise.resolve();
   }
-
-  var p = new Promise(function(resolve, reject) {
+  return new Promise(function(resolve, reject) {
     if (options.relations[url]) {
       var promises = options.relations[url].map(function(href) {
-        var realURL = Url.resolve(url, href);
-
-        log('pushed: ' + realURL);
-        var push = originalRes.push(realURL);
-
-        var pushRequest = createPushRequest(req, realURL);
-        return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log);
+        return push(middleware, req, originalRes, next, options, url, href, log, pushed);
       });
       Promise.all(promises).then(resolve);
       middleware(req, res, next);
@@ -133,25 +139,14 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         } else if (href.indexOf('//') === 0) {
           return;
         }
-        var realURL = Url.resolve(url, href);
-
-        log('pushed: ' + realURL);
-        var push = originalRes.push(realURL);
-
-        var pushRequest = createPushRequest(req, realURL);
-        return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log);
+        return push(middleware, req, originalRes, next, options, url, href, log, pushed);
       };
-
       var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
       var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
       var newRes = pipeToParser(res, onResource, enableHtmlImports, url, resolve, log);
       middleware(req, newRes, next);
     }
-
   });
-
-
-  return p;
 }
 
 var autoPush = function(middleware, options) {
@@ -165,7 +160,7 @@ var autoPush = function(middleware, options) {
   return function(req, res, next) {
     var url = req.url;
     log(req.method + ' ' + url);
-    handleRequest(middleware, req, res, res, next, url, options, log);
+    handleRequest(middleware, req, res, res, next, url, options, log, {});
   };
 };
 autoPush.static = function(root) {
