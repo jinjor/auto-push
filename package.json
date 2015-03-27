@@ -8,7 +8,7 @@
     "prepublish": "npm test"
   },
   "dependencies": {
-    "ecstatic": "^0.6.0",
+    "ecstatic": "^0.7.0",
     "htmlparser2": "^3.8.2",
     "http2": "^3.2.0",
     "object-assign": "^2.0.0",

@@ -7,7 +7,7 @@ var ecstatic = require('ecstatic');
 var http2 = require('http2');
 var Url = require('url');
 var h1proxy = require('./h1proxy.js');
-// var h2proxy = require('./h2proxy.js');
+var CssUrlFinder = require('./css-url-finder.js');
 
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   return new htmlparser2.Parser({
@@ -27,31 +27,26 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
 }
 
 function createCssParser(onResource) {
-  return through2(function(buf, enc, callback) {
-    var str = buf.toString();
-    (str.match(/url\(.*?g"\)/ig) || []).forEach(function(url) {
-      var url = url.split('"')[1];
-      onResource(url);
-    });
-    (str.match(/url\(.*?g'\)/ig) || []).forEach(function(url) {
-      var url = url.split("'")[1];
-      onResource(url);
-    });
-    callback();
+  var parser = new CssUrlFinder();
+  parser.on('data', function(url) {
+    onResource(url.toString());
   });
+  return parser;
 }
 
 
-function pipeToParser(res, onResource, enableHtmlImports, url) {
+function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var parser = null;
   var originalWrite = res.write;
   var originalWriteHead = res.writeHead;
   var originalSetHeader = res.setHeader;
   var originalEnd = res.end;
+  var promises = [];
+  var pushEnded = false;
   return assign(res, {
     writeHead: function() {
       if (this.stream.state === 'CLOSED') {
-        // console.log('ignored');
+        log('ignored');
         return;
       }
       originalWriteHead.apply(res, arguments);
@@ -65,26 +60,38 @@ function pipeToParser(res, onResource, enableHtmlImports, url) {
     },
     write: function(data) {
       if (this.stream.state === 'CLOSED') {
-        // console.log('ignored');
+        log('ignored');
         return;
       }
+      log('data: ' + url);
       var contentType = this.getHeader('content-type') || '';
       if (contentType.indexOf('text/html') >= 0) {
-        parser = parser || createHtmlParser(onResource, null, enableHtmlImports);
+        parser = parser || createHtmlParser(function() {
+          promises.push(onResource.apply(null, arguments));
+        }, null, enableHtmlImports);
         parser.write(data);
       } else if (contentType.indexOf('text/css') >= 0) {
-        parser = parser || createCssParser(onResource);
-        parser.write(data); // has a bug
+        parser = parser || createCssParser(function() {
+          promises.push(onResource.apply(null, arguments));
+        });
+        parser.write(data);
+      } else {
+        onPushEnd();
+        pushEnded = true;
       }
       originalWrite.apply(res, arguments);
     },
     end: function(data) {
       if (this.stream.state === 'CLOSED') {
-        // console.log('ignored');
+        log('ignored');
         return;
       }
-      originalEnd.apply(res, arguments);
-      // console.log('end: ' + url);
+      var _arguments = arguments;
+      !pushEnded && onPushEnd();
+      Promise.all(promises).then(function() {
+        originalEnd.apply(res, _arguments);
+        log('end: ' + url);
+      });
     }
   });
 }
@@ -100,23 +107,25 @@ function createPushRequest(req, newURL) {
 }
 
 
-function handleRequest(middleware, req, res, next, url, options) {
-  // console.log(res.push);
-  // console.log(url);
-  if (res.push) {
+function handleRequest(middleware, req, originalRes, res, next, url, options, log) {
+  if (!originalRes.push) {
+    middleware(req, res, next);
+    return Promise.resolve();
+  }
+
+  var p = new Promise(function(resolve, reject) {
     if (options.relations[url]) {
-      options.relations[url].forEach(function(href) {
+      var promises = options.relations[url].map(function(href) {
         var realURL = Url.resolve(url, href);
-        // console.log(realURL);
 
-        var push = res.push(realURL);
+        // console.log('pushed: ' + realURL);
+        var push = originalRes.push(realURL);
+
         var pushRequest = createPushRequest(req, realURL);
-        // setTimeout(function(){
-        handleRequest(middleware, pushRequest, push, next, realURL, options);
-        // }, 0);
-
+        return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log);
       });
-
+      Promise.all(promises).then(resolve);
+      middleware(req, res, next);
     } else {
       var onResource = function(href) {
         if (href.indexOf('http') === 0) {
@@ -125,33 +134,38 @@ function handleRequest(middleware, req, res, next, url, options) {
           return;
         }
         var realURL = Url.resolve(url, href);
-        // var _options = {};
-        // _options.protocol = 'https:'
-        // _options.host = req.headers.host;
-        // _options.path = realURL;
-        // var push = res.push(_options);
-        var push = res.push(realURL);
-        // console.log('pushed: ' + href + ' as ' + realURL);
+
+        log('pushed: ' + realURL);
+        var push = originalRes.push(realURL);
 
         var pushRequest = createPushRequest(req, realURL);
-        handleRequest(middleware, pushRequest, push, next, realURL, options);
+        return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log);
       };
 
       var userAgent = req.headers['user-agent'] ? req.headers['user-agent'].toLowerCase() : '';
       var enableHtmlImports = userAgent.indexOf('chrome') >= 0 || userAgent.indexOf('opr') >= 0;
-      res = pipeToParser(res, onResource, enableHtmlImports, url);
+      var newRes = pipeToParser(res, onResource, enableHtmlImports, url, resolve, log);
+      middleware(req, newRes, next);
     }
-  }
-  middleware(req, res, next);
+
+  });
+
+
+  return p;
 }
 
 var autoPush = function(middleware, options) {
   options = assign({
     relations: {}
   }, options || {});
+  
+  var debug = false;
+  var log = debug ? console.log.bind(console) : function() {};
+
   return function(req, res, next) {
     var url = req.url;
-    handleRequest(middleware, req, res, next, url, options);
+    log(req.method + ' ' + url);
+    handleRequest(middleware, req, res, res, next, url, options, log);
   };
 };
 autoPush.static = function(root) {
