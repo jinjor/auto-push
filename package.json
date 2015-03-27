@@ -1,6 +1,6 @@
 {
   "name": "auto-push",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A HTTP/2 middleware that automatically pushes sub-resources of HTML",
   "main": "index.js",
   "scripts": {
