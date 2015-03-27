@@ -6,15 +6,27 @@ util.inherits(CssUrlFinder, Transform);
 
 function getUrl(line) {
   if (!line) {
-    return null;
+    return null
   }
   var re = /.*url *\((.*)\).*/;
   var matched = line.match(re);
   var url = matched && matched[1];
-  if (!url) {
-    return null;
+  if (url) {
+    return url.replace(/"/g, '').replace(/'/g, '').trim();
   }
-  return url.replace(/"/g, '').replace(/'/g, '').trim();
+
+  var re = / *@import *'(.*)'.*/;
+  var matched = line.match(re);
+  var url = matched && matched[1];
+  if (url) {
+    return url.trim();
+  }
+  var re = / *@import *"(.*)".*/;
+  var matched = line.match(re);
+  var url = matched && matched[1];
+  if (url) {
+    return url.trim();
+  }
 }
 
 function CssUrlFinder(options) {

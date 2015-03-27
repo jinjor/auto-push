@@ -17,17 +17,35 @@ describe('css-url-finder', function() {
     });
   });
 
-  it('should parse css 1', function(done) {
+  it('should parse url 1', function(done) {
     assertSingle('body { background: url("foo/bar-_0123ABC.png"); }', 'foo/bar-_0123ABC.png', done);
   });
-  it('should works css 2', function(done) {
+  it('should parse url 2', function(done) {
     assertSingle('body { background: url(\'foo/bar-_0123ABC.png\'); }', 'foo/bar-_0123ABC.png', done);
   });
-  it('should works css 3', function(done) {
+  it('should parse url 3', function(done) {
     assertSingle('body { background: url(foo/bar-_0123ABC.png); }', 'foo/bar-_0123ABC.png', done);
   });
-  it('should works css 4', function(done) {
+  it('should parse url 4', function(done) {
     assertSingle('body { background: url ( "foo/bar-_0123ABC.png" ) ; }', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 1', function(done) {
+    assertSingle('@import "foo/bar-_0123ABC.png";', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 2', function(done) {
+    assertSingle('@import \'foo/bar-_0123ABC.png\';', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 3', function(done) {
+    assertSingle('@import url("foo/bar-_0123ABC.png");', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 4', function(done) {
+    assertSingle('@import url(\'foo/bar-_0123ABC.png\');', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 5', function(done) {
+    assertSingle('@import url(foo/bar-_0123ABC.png);', 'foo/bar-_0123ABC.png', done);
+  });
+  it('should parse @import 6', function(done) {
+    assertSingle('@import url(foo/bar-_0123ABC.png) print;', 'foo/bar-_0123ABC.png', done);
   });
 
   it('should read separated url', function(done) {
