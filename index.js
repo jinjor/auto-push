@@ -44,10 +44,11 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var originalEnd = res.end;
   var promises = [];
   var pushEnded = false;
+  var applyWrite = [];
   return assign(res, {
     writeHead: function() {
       if (this.stream.state === 'CLOSED') {
-        log('ignored');
+        log('ignored(writeHead): ' + url);
         return;
       }
       originalWriteHead.apply(res, arguments);
@@ -61,35 +62,44 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
     },
     write: function(data) {
       if (this.stream.state === 'CLOSED') {
-        log('ignored');
+        log('ignored(write): ' + url);
         return;
       }
       log('data: ' + url);
       var contentType = this.getHeader('content-type') || '';
+      var _arguments = arguments;
       if (contentType.indexOf('text/html') >= 0) {
         parser = parser || createHtmlParser(function() {
           promises.push(onResource.apply(null, arguments));
         }, null, enableHtmlImports);
         parser.write(data);
+        applyWrite.push(function() {
+          originalWrite.apply(res, _arguments);
+        });
       } else if (contentType.indexOf('text/css') >= 0) {
         parser = parser || createCssParser(function() {
           promises.push(onResource.apply(null, arguments));
         });
         parser.write(data);
+        originalWrite.apply(res, _arguments);
       } else {
-        onPushEnd();
         pushEnded = true;
+        onPushEnd();
+        originalWrite.apply(res, _arguments);
       }
-      originalWrite.apply(res, arguments);
     },
     end: function(data) {
       if (this.stream.state === 'CLOSED') {
-        log('ignored');
+        log('ignored(end): ' + url);
         return;
       }
       var _arguments = arguments;
       !pushEnded && onPushEnd();
+      var contentType = this.getHeader('content-type') || '';
       Promise.all(promises).then(function() {
+        applyWrite.forEach(function(f) {
+          f();
+        });
         originalEnd.apply(res, _arguments);
         log('end: ' + url);
       });

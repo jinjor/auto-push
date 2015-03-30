@@ -40,13 +40,12 @@ function testSingleResource(mainUrl, html, routes, options, accessURL, wontPush,
     response.statusCode.should.equal(200);
     response.on('data', function(data) {
       // console.log('response-data');
-      if(wontPush) {
-        done();
-        return;
-      }
       pushedRequestCount.should.equal(routesCount);
       data.toString().should.equal(html);
     });
+    if(wontPush) {
+      response.on('end', done);
+    }
   });
 
   request.on('push', function(pushRequest) {
