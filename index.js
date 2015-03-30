@@ -3,11 +3,8 @@ var htmlparser2 = require('htmlparser2');
 var fs = require('fs');
 var through2 = require('through2');
 var assign = require('object-assign');
-var ecstatic = require('ecstatic');
-var http2 = require('http2');
 var Url = require('url');
 var assert = require('assert');
-var h1proxy = require('./h1proxy.js');
 var CssUrlFinder = require('./css-url-finder.js');
 
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
@@ -177,28 +174,11 @@ var autoPush = function(middleware, options) {
     handleRequest(middleware, req, res, res, next, url, options, log, {});
   };
 };
-autoPush.static = function(root) {
-  return autoPush(ecstatic(root));
-};
-autoPush.server = function(options, root) {
-  return http2.createServer(options, autoPush(ecstatic(root)));
-};
-autoPush.h1LocalProxy = function(port) {
-  return autoPush(h1proxy(port));
-};
-// autoPush.h2LocalProxy = function(fromOptions, toOptions) {
-//   h2Proxy.start({
-//     from: fromOptions,
-//     to: toOptions,
-//     pipe: function(from, to) {
-//       //TODO push_promise to 'from', GET request to 'to'
-//     }
-//   });
-// };
+
 
 autoPush.private = {
   createHtmlParser: createHtmlParser,
   handleRequest: handleRequest
 };
 
-module.exports = autoPush
+module.exports = autoPush;

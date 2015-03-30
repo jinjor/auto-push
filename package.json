@@ -1,33 +1,36 @@
 {
   "name": "auto-push",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A HTTP/2 middleware that automatically pushes sub-resources of HTML",
   "main": "index.js",
   "scripts": {
     "test": "istanbul cover ./node_modules/mocha/bin/_mocha test/",
-    "prepublish": "npm test",
     "coveralls": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
   "dependencies": {
-    "ecstatic": "^0.7.0",
     "htmlparser2": "^3.8.2",
-    "http2": "^3.2.0",
     "object-assign": "^2.0.0",
-    "request": "^2.53.0",
     "through2": "^0.6.3"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/jinjor/auto-push.git"
   },
-  "author": "",
+  "author": "Yosuke Torii",
   "license": "MIT",
+  "keywords": [
+    "http",
+    "http2",
+    "middleware",
+    "push"
+  ],
   "bugs": {
     "url": "https://github.com/jinjor/auto-push/issues"
   },
   "homepage": "https://github.com/jinjor/auto-push",
   "devDependencies": {
     "coveralls": "^2.11.2",
+    "http2": "^3.2.0",
     "istanbul": "^0.3.11",
     "mocha": "^2.1.0",
     "should": "^5.0.1"
