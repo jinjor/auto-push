@@ -13,6 +13,10 @@ function(req, res, next) {
 ```
 .
 
+## Ability
+
+<img src="ability.png" alt="ability.png" title="ability.png" height="350"/>
+
 ## Example
 
 ### Work with a server
