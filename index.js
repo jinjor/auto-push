@@ -40,7 +40,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var originalSetHeader = res.setHeader;
   var originalEnd = res.end;
   var promises = [];
-  var pushEnded = false;
+  var pushDone = false;
   var applyWrite = [];
   return assign(res, {
     writeHead: function() {
@@ -54,6 +54,10 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       var lowerKey = key.toLowerCase();
       if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
         return;
+      }
+      if (key.toLowerCase() === 'content-type' && (value !== 'text/html' && value !== 'text/css')) {
+        !pushDone && onPushEnd();
+        pushDone = true;
       }
       originalSetHeader.apply(res, arguments);
     },
@@ -80,8 +84,8 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
         parser.write(data);
         originalWrite.apply(res, _arguments);
       } else {
-        pushEnded = true;
-        onPushEnd();
+        !pushDone && onPushEnd();
+        pushDone = true;
         originalWrite.apply(res, _arguments);
       }
     },
@@ -91,7 +95,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
         return;
       }
       var _arguments = arguments;
-      !pushEnded && onPushEnd();
+      !pushDone && onPushEnd();
       var contentType = this.getHeader('content-type') || '';
       Promise.all(promises).then(function() {
         applyWrite.forEach(function(f) {
@@ -116,7 +120,7 @@ function createPushRequest(req, newURL) {
 
 function push(middleware, req, originalRes, next, options, url, href, log, pushed) {
   var realURL = Url.resolve(url, href);
-  if(!pushed[realURL]) {
+  if (!pushed[realURL]) {
     log('pushed: ' + realURL);
     var push = originalRes.push(realURL);
     var pushRequest = createPushRequest(req, realURL);
