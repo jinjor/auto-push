@@ -55,7 +55,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
         return;
       }
-      if (key.toLowerCase() === 'content-type' && (value !== 'text/html' && value !== 'text/css')) {
+      if (key.toLowerCase() === 'content-type' && (value.indexOf('text/html') < 0 && value.indexOf('text/css') < 0)) {
         !pushDone && onPushEnd();
         pushDone = true;
       }
