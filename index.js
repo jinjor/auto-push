@@ -43,7 +43,11 @@ var ContentType = {
     return value.indexOf('text/css') >= 0;
   }
 };
-
+var ContentEncoding = {
+  isGzip: function(value) {
+    return value.toLowerCase().indexOf('gzip') >= 0;
+  }
+};
 
 function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var parser = null;
@@ -54,80 +58,114 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var promises = [];
   var pushDone = false;
   var applyWrite = [];
-  return assign(res, {
-    writeHead: function() {
-      if (this.stream.state === 'CLOSED') {
-        log('ignored(writeHead): ' + url);
-        return;
-      }
-      originalWriteHead.apply(res, arguments);
-    },
-    setHeader: function(key, value) {
-      var lowerKey = key.toLowerCase();
-      if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
-        return;
-      }
-      if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
-        !pushDone && onPushEnd();
-        pushDone = true;
-      }
-      originalSetHeader.apply(res, arguments);
-    },
-    write: function(data) {
-      if (this.stream.state === 'CLOSED') {
-        log('ignored(write): ' + url);
-        return;
-      }
+
+  var NewRes = function() {};
+  NewRes.prototype = res;
+  var newRes = new NewRes();
+  newRes.writeHead = function(status) {
+    if (this.stream.state === 'CLOSED') {
+      log('ignored(writeHead): ' + url);
+      return;
+    }
+    originalWriteHead.apply(res, arguments);
+  };
+  newRes.setHeader = function(key, value) {
+    var lowerKey = key.toLowerCase();
+    if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
+      return;
+    }
+    if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
+      !pushDone && onPushEnd();
+      pushDone = true;
+    }
+    originalSetHeader.apply(res, arguments);
+  };
+  newRes.write = function(data) {
+    if (this.stream.state === 'CLOSED') {
+      log('ignored(write): ' + url);
+      return;
+    }
+    var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
+
+    var contentType = this.getHeader('content-type') || '';
+    var _arguments = arguments;
+
+    if (ContentType.isHtml(contentType)) {
+      parser = parser || createHtmlParser(function() {
+        promises.push(onResource.apply(null, arguments));
+      }, null, enableHtmlImports);
+
+      parser.write(data);
+      applyWrite.push(function() {
+        log('data: ' + url);
+        originalWrite.apply(res, _arguments);
+      });
+    } else if (ContentType.isCSS(contentType)) {
+      parser = parser || createCssParser(function() {
+        promises.push(onResource.apply(null, arguments));
+      });
+      // console.log(data.toString());
+      parser.write(data);
       log('data: ' + url);
+      originalWrite.apply(res, _arguments);
+    } else {
+      !pushDone && onPushEnd();
+      pushDone = true;
+      log('data: ' + url);
+      originalWrite.apply(res, _arguments);
+    }
+  };
+  newRes.end = function(data) {
+    // console.log(data);
+    if (this.stream.state === 'CLOSED') {
+      log('ignored(end): ' + url);
+      return;
+    }
+    var _arguments = arguments;
+
+    // var contentType = this.getHeader('content-type') || '';
+
+    if (data) {
       var contentType = this.getHeader('content-type') || '';
-      var _arguments = arguments;
       if (ContentType.isHtml(contentType)) {
         parser = parser || createHtmlParser(function() {
           promises.push(onResource.apply(null, arguments));
         }, null, enableHtmlImports);
         parser.write(data);
-        applyWrite.push(function() {
-          originalWrite.apply(res, _arguments);
-        });
       } else if (ContentType.isCSS(contentType)) {
         parser = parser || createCssParser(function() {
           promises.push(onResource.apply(null, arguments));
         });
         parser.write(data);
-        originalWrite.apply(res, _arguments);
-      } else {
-        !pushDone && onPushEnd();
-        pushDone = true;
-        originalWrite.apply(res, _arguments);
       }
-    },
-    end: function(data) {
-      if (this.stream.state === 'CLOSED') {
-        log('ignored(end): ' + url);
-        return;
-      }
-      var _arguments = arguments;
-      !pushDone && onPushEnd();
-      // var contentType = this.getHeader('content-type') || '';
-      Promise.all(promises).then(function() {
-        applyWrite.forEach(function(f) {
-          f();
-        });
-        originalEnd.apply(res, _arguments);
-        log('end: ' + url);
-      });
     }
-  });
+
+    !pushDone && onPushEnd();
+
+    Promise.all(promises).then(function() {
+      applyWrite.forEach(function(f) {
+        f();
+      });
+      originalEnd.apply(res, _arguments);
+      log('end: ' + url);
+    });
+  };
+
+  return newRes;
 }
 
 function createPushRequest(req, newURL) {
-  return assign({}, req, {
-    url: newURL,
-    headers: assign({}, req.headers, {
-      'if-modified-since': null,
-      'if-none-match': null
-    })
+
+  var NewReq = function() {};
+  NewReq.prototype = req;
+  var newReq = new NewReq();
+  newReq.url = newURL;
+  newReq.headers = assign({}, req.headers, {
+    'if-modified-since': null,
+    'if-none-match': null
   });
+  newReq.sturl = null; // for 'st' module
+  return newReq;
 }
 
 function defaultPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
@@ -145,6 +183,11 @@ function pushLogic(options) {
   var pushStrategy = options.ngttpxMode ? nghttpxPushStrategy : defaultPushStrategy;
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
+    // console.log(url, href, realURL);
+    if (url.indexOf('/foo/foo/foo/') >= 0) {
+      console.trace();
+      process.exit(1);
+    }
     if (!pushed[realURL]) {
       log('pushed: ' + realURL);
       pushed[realURL] = true;

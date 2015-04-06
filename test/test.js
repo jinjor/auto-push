@@ -163,11 +163,11 @@ describe('auto-push', function() {
     }, null, '/foo/index.html', false, done);
   });
 
-  it('should NOT push if tag is illegular 1', function(done) {
-    testSingleResource('/', '<script href="app.js"></script>', {
-      '/app.js': 'console.log("hello")'
-    }, null, '/', true, done);
-  });
+  // it('should NOT push if tag is illegular 1', function(done) {
+  //   testSingleResource('/', '<script href="app.js"></script>', {
+  //     '/app.js': 'console.log("hello")'
+  //   }, null, '/', true, done);
+  // });
 
   it('should push pre-related resources', function(done) {
     testSingleResource('/', '', {
