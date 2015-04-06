@@ -12,7 +12,7 @@ setTimeout(function() {
 
 var xhr = new XMLHttpRequest();
 xhr.open('GET', '/sample.json', true);
-xhr.responseType = 'application/json';
+xhr.responseType = 'json';
 xhr.onload = function(e) {
   console.log(this.response);
 };

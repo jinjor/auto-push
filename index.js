@@ -14,9 +14,6 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
         onResource(attribs.src);
       } else if (name === 'link' && attribs.rel === 'stylesheet') {
         onResource(attribs.href);
-      } else if (name === 'link' && attribs.rel === 'preload') {
-        // TODO https://w3c.github.io/resource-hints/
-        // maybe this kind of resource is not required immediately
       } else if (name === 'link' && attribs.rel === 'import') {
         enableHtmlImports && onResource(attribs.href); // firefox sends RST_STREAM (INTERNAL_ERROR)
       } else if (name === 'img') {
@@ -96,18 +93,31 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       }, null, enableHtmlImports);
 
       parser.write(data);
-      applyWrite.push(function() {
+      if (res._isOriginalRes) {
+        applyWrite.push(function() {
+          log('data: ' + url);
+          originalWrite.apply(res, _arguments);
+        });
+      } else {
         log('data: ' + url);
         originalWrite.apply(res, _arguments);
-      });
+      }
+
     } else if (ContentType.isCSS(contentType)) {
       parser = parser || createCssParser(function() {
         promises.push(onResource.apply(null, arguments));
       });
-      // console.log(data.toString());
+
       parser.write(data);
-      log('data: ' + url);
-      originalWrite.apply(res, _arguments);
+      if (res._isOriginalRes) {
+        applyWrite.push(function() {
+          log('data: ' + url);
+          originalWrite.apply(res, _arguments);
+        });
+      } else {
+        log('data: ' + url);
+        originalWrite.apply(res, _arguments);
+      }
     } else {
       !pushDone && onPushEnd();
       pushDone = true;
@@ -115,18 +125,19 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       originalWrite.apply(res, _arguments);
     }
   };
+  newRes.__defineSetter__("statusCode", function(s) {
+    res.statusCode = s;
+  });
   newRes.end = function(data) {
-    // console.log(data);
     if (this.stream.state === 'CLOSED') {
       log('ignored(end): ' + url);
       return;
     }
     var _arguments = arguments;
 
-    // var contentType = this.getHeader('content-type') || '';
+    var contentType = this.getHeader('content-type') || '';
 
     if (data) {
-      var contentType = this.getHeader('content-type') || '';
       if (ContentType.isHtml(contentType)) {
         parser = parser || createHtmlParser(function() {
           promises.push(onResource.apply(null, arguments));
@@ -140,9 +151,19 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       }
     }
 
+    if (res._isOriginalRes) {
+      if (res.nghttpxPush) { // TODO not pluggable...
+        var value = (res.nghttpxPush).map(function(url) {
+          return '<' + url + '>; rel=preload';
+        }).join(',');
+        originalSetHeader.apply(res, ['link', value]);
+      }
+    }
+
     !pushDone && onPushEnd();
 
     Promise.all(promises).then(function() {
+
       applyWrite.forEach(function(f) {
         f();
       });
@@ -150,6 +171,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       log('end: ' + url);
     });
   };
+  newRes._isOriginalRes = false;
 
   return newRes;
 }
@@ -175,12 +197,13 @@ function defaultPushStrategy(middleware, req, originalRes, next, options, realUR
 }
 
 function nghttpxPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
-  originalRes.setHeader('link', '<' + realURL + '>; rel=preload');
+  originalRes.nghttpxPush = originalRes.nghttpxPush || [];
+  originalRes.nghttpxPush.push(realURL);
   return Promise.resolve();
 }
 
 function pushLogic(options) {
-  var pushStrategy = options.ngttpxMode ? nghttpxPushStrategy : defaultPushStrategy;
+  var pushStrategy = options.useNghttpx ? nghttpxPushStrategy : defaultPushStrategy;
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
     // console.log(url, href, realURL);
@@ -243,6 +266,7 @@ var autoPush = function(middleware, options) {
   return function(req, res, next) {
     var url = req.url;
     log(req.method + ' ' + url);
+    res._isOriginalRes = true;
     handleRequest(middleware, req, res, res, next, url, options, log, {});
   };
 };
