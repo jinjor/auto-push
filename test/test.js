@@ -11,21 +11,28 @@ var tlsOptions = {
 
 var port = 8100;
 
-function createServer(routes, options) {
+function createServer(routes, options, responseStrategy) {
   return http2.createServer(tlsOptions, autoPush(function(req, res) {
     var data = routes[req.url];
     var status = data.status || 200;
     var contentType = data.contentType || 'text/html';
     var content = data.content;
+
     res.writeHead(status, {
       'content-type': contentType
     });
-    res.end(content);
+    if (!responseStrategy) {
+      res.end(content);
+    } else if (responseStrategy === 1) {
+      res.write(content);
+      res.end();
+    }
+
   }, options));
 }
 
-function testSingleResource(routes, options, accessURL, wontPush, done) {
-  var server = createServer(routes, options);
+function testSingleResource(routes, options, accessURL, responseStrategy, wontPush, done) {
+  var server = createServer(routes, options, responseStrategy);
   server.listen(++port);
 
   var subresourceCount = Object.keys(routes).length - 1;
@@ -59,16 +66,16 @@ function testSingleResource(routes, options, accessURL, wontPush, done) {
   });
 
   request.on('push', function(pushRequest) {
-    push('push:'+pushRequest.url);
+    push('push:' + pushRequest.url);
     if (wontPush) {
       assert.fail('unexpectedly pushed');
     }
     pushedRequestCount++;
     pushRequest.on('response', function(pushResponse) {
-      push('push-response:'+pushRequest.url);
+      push('push-response:' + pushRequest.url);
       pushResponse.statusCode.should.equal(200);
       pushResponse.on('data', function(data) {
-        push('push-response-data:'+pushRequest.url);
+        push('push-response-data:' + pushRequest.url);
         pushedResponseCount++;
         data.toString().should.equal(routes[pushRequest.url].content);
         // console.log(pushedResponseCount +'/' + subresourceCount);
@@ -99,7 +106,7 @@ describe('auto-push', function() {
       '/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/', false, done);
+    }, null, '/', 0, false, done);
   });
 
   it('should push .css', function(done) {
@@ -110,7 +117,7 @@ describe('auto-push', function() {
       '/app.css': {
         content: 'body { color: red; }'
       }
-    }, null, '/', false, done);
+    }, null, '/', 0, false, done);
   });
 
   it('should push image', function(done) {
@@ -121,7 +128,7 @@ describe('auto-push', function() {
       '/image.png': {
         content: '123'
       }
-    }, null, '/', false, done);
+    }, null, '/', 0, false, done);
   });
 
   it('should push image2', function(done) {
@@ -132,7 +139,51 @@ describe('auto-push', function() {
       '/image.png': {
         content: '123'
       }
-    }, null, '/', false, done);
+    }, null, '/', 0, false, done);
+  });
+
+  it('should push .js --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<script src="/app.js"></script>'
+      },
+      '/app.js': {
+        content: 'console.log("hello")'
+      }
+    }, null, '/', 1, false, done);
+  });
+
+  it('should push .css --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="stylesheet" href="/app.css"></link>'
+      },
+      '/app.css': {
+        content: 'body { color: red; }'
+      }
+    }, null, '/', 1, false, done);
+  });
+
+  it('should push image --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<img src="/image.png"></img>'
+      },
+      '/image.png': {
+        content: '123'
+      }
+    }, null, '/', 1, false, done);
+  });
+
+  it('should push image2 --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<img src="/image.png"></img>'
+      },
+      '/image.png': {
+        content: '123'
+      }
+    }, null, '/', 1, false, done);
   });
 
   it('should resolve url 1', function(done) {
@@ -143,7 +194,7 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/', false, done);
+    }, null, '/foo/', 0, false, done);
   });
 
   it('should resolve url 2', function(done) {
@@ -154,7 +205,7 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/', false, done);
+    }, null, '/foo/', 0, false, done);
   });
 
   it('should resolve url 3', function(done) {
@@ -165,7 +216,7 @@ describe('auto-push', function() {
       '/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/', false, done);
+    }, null, '/foo/', 0, false, done);
   });
 
   it('should resolve url 4', function(done) {
@@ -176,7 +227,7 @@ describe('auto-push', function() {
       '/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/', false, done);
+    }, null, '/foo/', 0, false, done);
   });
 
   it('should resolve url 5', function(done) {
@@ -187,7 +238,7 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/', false, done);
+    }, null, '/foo/', 0, false, done);
   });
 
 
@@ -199,7 +250,7 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/index.html', false, done);
+    }, null, '/foo/index.html', 0, false, done);
   });
 
   it('should resolve url 2a', function(done) {
@@ -210,7 +261,7 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/index.html', false, done);
+    }, null, '/foo/index.html', 0, false, done);
   });
 
   it('should resolve url 3a', function(done) {
@@ -221,7 +272,7 @@ describe('auto-push', function() {
       '/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/index.html', false, done);
+    }, null, '/foo/index.html', 0, false, done);
   });
 
   it('should resolve url 4a', function(done) {
@@ -232,7 +283,7 @@ describe('auto-push', function() {
       '/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/index.html', false, done);
+    }, null, '/foo/index.html', 0, false, done);
   });
 
   it('should resolve url 5a', function(done) {
@@ -243,14 +294,14 @@ describe('auto-push', function() {
       '/foo/app.js': {
         content: 'console.log("hello")'
       }
-    }, null, '/foo/index.html', false, done);
+    }, null, '/foo/index.html', 0, false, done);
   });
 
   // it('should NOT push if tag is illegular 1', function(done) {
   //   testSingleResource({
   //      '/': { content: '<script href="app.js"></script>'},
   //     '/app.js': { content: 'console.log("hello")'}
-  //   }, null, '/', true, done);
+  //   }, null, '/', 0, true, done);
   // });
 
   it('should push pre-related resources', function(done) {
@@ -265,7 +316,7 @@ describe('auto-push', function() {
       relations: {
         '/': ['/app.js']
       }
-    }, '/', false, done);
+    }, '/', 0, false, done);
   });
 
   it('should push pre-related resources 2', function(done) {
@@ -280,7 +331,7 @@ describe('auto-push', function() {
       relations: {
         '/': ['./app.js']
       }
-    }, '/', false, done);
+    }, '/', 0, false, done);
   });
 
   it('should push pre-related resources 3', function(done) {
@@ -295,7 +346,7 @@ describe('auto-push', function() {
       relations: {
         '/foo/': ['../app.js']
       }
-    }, '/foo/', false, done);
+    }, '/foo/', 0, false, done);
   });
 
   it('should recursively push', function(done) {
@@ -310,7 +361,22 @@ describe('auto-push', function() {
       '/a.jpeg': {
         content: '_'
       }
-    }, null, '/', false, done);
+    }, null, '/', 0, false, done);
+  });
+
+  it('should recursively push --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      },
+      '/app.css': {
+        contentType: 'text/css',
+        content: 'body { background: url("a.jpeg"); }'
+      },
+      '/a.jpeg': {
+        content: '_'
+      }
+    }, null, '/', 0, false, done);
   });
 
 

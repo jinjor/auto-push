@@ -47,6 +47,12 @@ CssUrlFinder.prototype._transform = function(chunk, encoding, done) {
       i = 0;
     }
   }
+  var line = chunk.toString();
+  var url = getUrl(line);
+  if (url) {
+    this.push(url);
+    chunk = new Buffer(line.split(url)[1]);
+  }
   this.fragment = chunk;
   done();
 };

@@ -64,6 +64,10 @@ describe('css-url-finder', function() {
     s.push(null);
   });
 
+  it('should pick url without \\n', function(done) {
+    assertSingle2('body { background: url("foo/bar-_0123ABC.png"); }', 'foo/bar-_0123ABC.png', done);
+  });
+
   function assertSingle(line, expectedUrl, done) {
     var url = '';
     var s = new stream.Readable();
@@ -76,6 +80,14 @@ describe('css-url-finder', function() {
     });
     s.push(line);
     s.push(null);
+  }
+  function assertSingle2(line, expectedUrl, done) {
+    var finder = new CssUrlFinder();
+    finder.on('data', function(url) {
+      url.toString().should.equal(expectedUrl);
+      done();
+    });
+    finder.write(line);
   }
 
 

@@ -86,9 +86,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
 
     var contentType = this.getHeader('content-type') || '';
     var _arguments = arguments;
-
-
-
+    
     if (ContentType.isHtml(contentType)) {
       parser = parser || createHtmlParser(function() {
         promises.push(onResource.apply(null, arguments));
@@ -139,8 +137,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
         parser = parser || createCssParser(function() {
           promises.push(onResource.apply(null, arguments));
         });
-        // parser.write(new Buffer(data));
-        parser.write(data + '\n');//TODO
+        parser.write(data);
       }
     }
 
