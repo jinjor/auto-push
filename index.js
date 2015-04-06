@@ -14,6 +14,9 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
         onResource(attribs.src);
       } else if (name === 'link' && attribs.rel === 'stylesheet') {
         onResource(attribs.href);
+      } else if (name === 'link' && attribs.rel === 'preload') {
+        // TODO https://w3c.github.io/resource-hints/
+        // maybe this kind of resource is not required immediately
       } else if (name === 'link' && attribs.rel === 'import') {
         enableHtmlImports && onResource(attribs.href); // firefox sends RST_STREAM (INTERNAL_ERROR)
       } else if (name === 'img') {
