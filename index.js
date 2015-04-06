@@ -91,23 +91,12 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       parser = parser || createHtmlParser(function() {
         promises.push(onResource.apply(null, arguments));
       }, null, enableHtmlImports);
-
-      parser.write(data);
-      if (res._isOriginalRes) {
-        applyWrite.push(function() {
-          log('data: ' + url);
-          originalWrite.apply(res, _arguments);
-        });
-      } else {
-        log('data: ' + url);
-        originalWrite.apply(res, _arguments);
-      }
-
     } else if (ContentType.isCSS(contentType)) {
       parser = parser || createCssParser(function() {
         promises.push(onResource.apply(null, arguments));
       });
-
+    }
+    if (parser) {
       parser.write(data);
       if (res._isOriginalRes) {
         applyWrite.push(function() {
@@ -168,7 +157,6 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
     !pushDone && onPushEnd();
 
     Promise.all(promises).then(function() {
-
       applyWrite.forEach(function(f) {
         f();
       });
@@ -217,11 +205,6 @@ function pushLogic(options) {
   var pushStrategy = options.useNghttpx ? nghttpxPushStrategy : (options.useModSpdy ? modSpdyPushStrategy : defaultPushStrategy);
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
-    // console.log(url, href, realURL);
-    if (url.indexOf('/foo/foo/foo/') >= 0) {
-      console.trace();
-      process.exit(1);
-    }
     if (!pushed[realURL]) {
       log('pushed: ' + realURL);
       pushed[realURL] = true;
