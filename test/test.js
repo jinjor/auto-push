@@ -28,41 +28,53 @@ function testSingleResource(routes, options, accessURL, wontPush, done) {
   var server = createServer(routes, options);
   server.listen(++port);
 
-  var routesCount = Object.keys(routes).length - 1; //subresource
+  var subresourceCount = Object.keys(routes).length - 1;
 
   var request = http2.get('https://localhost:' + port + accessURL);
 
   var pushedRequestCount = 0;
   var pushedResponseCount = 0;
 
+  var log = [];
+  var push = function(message) {
+    // console.log(message);
+    log.push(message);
+  }
+
   request.on('response', function(response) {
-    // console.log('response');
+    push('response');
     response.statusCode.should.equal(200);
     response.on('data', function(data) {
-      // console.log('response-data');
-      pushedRequestCount.should.equal(routesCount);
+      push('response-data');
+      pushedRequestCount.should.equal(subresourceCount);
       data.toString().should.equal(routes[accessURL].content);
     });
-    if (wontPush) {
-      response.on('end', done);
-    }
+    response.on('end', function() {
+      push('response-end');
+      if (wontPush) {
+        done();
+      }
+    });
+
   });
 
   request.on('push', function(pushRequest) {
+    push('push:'+pushRequest.url);
     if (wontPush) {
       assert.fail('unexpectedly pushed');
     }
     pushedRequestCount++;
     pushRequest.on('response', function(pushResponse) {
-      // console.log('push-response');
+      push('push-response:'+pushRequest.url);
       pushResponse.statusCode.should.equal(200);
       pushResponse.on('data', function(data) {
-        // console.log('push-response-data');
+        push('push-response-data:'+pushRequest.url);
         pushedResponseCount++;
         data.toString().should.equal(routes[pushRequest.url].content);
-        // console.log(pushedResponseCount +'/' + routesCount);
-        if (pushedResponseCount === routesCount) {
+        // console.log(pushedResponseCount +'/' + subresourceCount);
+        if (pushedResponseCount === subresourceCount) {
           pushedRequestCount.should.equal(pushedResponseCount);
+          // console.log(log);
           server.close(function() {
 
           });
@@ -73,48 +85,6 @@ function testSingleResource(routes, options, accessURL, wontPush, done) {
   });
 }
 
-// function testRecursiveResource(mainUrl, html, routes, options, accessURL, done) {
-//   var server = createServer(mainUrl, html, routes, options);
-//   server.listen(++port);
-//
-//   var routesCount = Object.keys(routes).length;
-//
-//   var request = http2.get('https://localhost:' + port + accessURL);
-//
-//   var pushedRequestCount = 0;
-//   var pushedResponseCount = 0;
-//
-//   request.on('response', function(response) {
-//     // console.log('response');
-//     response.statusCode.should.equal(200);
-//     response.on('data', function(data) {
-//       // console.log('response-data');
-//       pushedRequestCount.should.equal(routesCount);
-//       data.toString().should.equal(html);
-//     });
-//   });
-//
-//   request.on('push', function(pushRequest) {
-//     pushedRequestCount++;
-//     pushRequest.on('response', function(pushResponse) {
-//       // console.log('push-response');
-//       pushResponse.statusCode.should.equal(200);
-//       pushResponse.on('data', function(data) {
-//         // console.log('push-response-data');
-//         pushedResponseCount++;
-//         data.toString().should.equal(routes[pushRequest.url]);
-//         // console.log(pushedResponseCount +'/' + routesCount);
-//         if (pushedResponseCount === routesCount) {
-//           pushedRequestCount.should.equal(pushedResponseCount);
-//           server.close(function() {
-//
-//           });
-//           done();
-//         }
-//       });
-//     });
-//   });
-// }
 
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -326,6 +296,21 @@ describe('auto-push', function() {
         '/foo/': ['../app.js']
       }
     }, '/foo/', false, done);
+  });
+
+  it('should recursively push', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      },
+      '/app.css': {
+        contentType: 'text/css',
+        content: 'body { background: url("a.jpeg"); }'
+      },
+      '/a.jpeg': {
+        content: '_'
+      }
+    }, null, '/', false, done);
   });
 
 

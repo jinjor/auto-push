@@ -12,6 +12,7 @@ describe('css-url-finder', function() {
     fs.createReadStream('test/assets/1.css').pipe(new CssUrlFinder()).on('data', function(_url) {
       url = _url.toString();
     }).on('end', function() {
+
       url.should.equal('foo/bar-_0123ABC.png');
       done();
     });
