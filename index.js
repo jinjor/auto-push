@@ -157,6 +157,11 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
           return '<' + url + '>; rel=preload';
         }).join(',');
         originalSetHeader.apply(res, ['link', value]);
+      } else if (modspdyPush) {
+        var value = (res.modspdyPush).map(function(url) {
+          return '"' + url + '"';
+        }).join(',');
+        originalSetHeader.apply(res, ['X-Associated-Content', value]);
       }
     }
 
@@ -202,8 +207,14 @@ function nghttpxPushStrategy(middleware, req, originalRes, next, options, realUR
   return Promise.resolve();
 }
 
+function modSpdyPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+  originalRes.modspdyPush = originalRes.nghttpxPush || [];
+  originalRes.modspdyPush.push(realURL);
+  return Promise.resolve();
+}
+
 function pushLogic(options) {
-  var pushStrategy = options.useNghttpx ? nghttpxPushStrategy : defaultPushStrategy;
+  var pushStrategy = options.useNghttpx ? nghttpxPushStrategy : (options.useModSpdy ? modSpdyPushStrategy : defaultPushStrategy);
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
     // console.log(url, href, realURL);
