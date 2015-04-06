@@ -138,7 +138,7 @@ function nghttpxPushStrategy(middleware, req, originalRes, next, options, realUR
   return Promise.resolve();
 }
 
-function pushLogic(options, pushed) {
+function pushLogic(options) {
   var pushStrategy = options.ngttpxMode ? nghttpxPushStrategy : defaultPushStrategy;
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
