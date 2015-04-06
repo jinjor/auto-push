@@ -32,6 +32,15 @@ function createCssParser(onResource) {
   return parser;
 }
 
+var ContentType = {
+  isHtml: function(value) {
+    return value.indexOf('text/html') >= 0;
+  },
+  isCSS: function(value) {
+    return value.indexOf('text/css') >= 0;
+  }
+};
+
 
 function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var parser = null;
@@ -55,7 +64,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
         return;
       }
-      if (key.toLowerCase() === 'content-type' && (value.indexOf('text/html') < 0 && value.indexOf('text/css') < 0)) {
+      if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
         !pushDone && onPushEnd();
         pushDone = true;
       }
@@ -69,7 +78,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       log('data: ' + url);
       var contentType = this.getHeader('content-type') || '';
       var _arguments = arguments;
-      if (contentType.indexOf('text/html') >= 0) {
+      if (ContentType.isHtml(contentType)) {
         parser = parser || createHtmlParser(function() {
           promises.push(onResource.apply(null, arguments));
         }, null, enableHtmlImports);
@@ -77,7 +86,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
         applyWrite.push(function() {
           originalWrite.apply(res, _arguments);
         });
-      } else if (contentType.indexOf('text/css') >= 0) {
+      } else if (ContentType.isCSS(contentType)) {
         parser = parser || createCssParser(function() {
           promises.push(onResource.apply(null, arguments));
         });
@@ -96,7 +105,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
       }
       var _arguments = arguments;
       !pushDone && onPushEnd();
-      var contentType = this.getHeader('content-type') || '';
+      // var contentType = this.getHeader('content-type') || '';
       Promise.all(promises).then(function() {
         applyWrite.forEach(function(f) {
           f();
@@ -118,18 +127,29 @@ function createPushRequest(req, newURL) {
   });
 }
 
-function push(middleware, req, originalRes, next, options, url, href, log, pushed) {
-  var realURL = Url.resolve(url, href);
-  if (!pushed[realURL]) {
-    log('pushed: ' + realURL);
-    var push = originalRes.push(realURL);
-    var pushRequest = createPushRequest(req, realURL);
-    // assert(pushRequest.url === realURL);
-    pushed[realURL] = true;
-    return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
-  } else {
-    return Promise.resolve();
-  }
+function defaultPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+  var push = originalRes.push(realURL);
+  var pushRequest = createPushRequest(req, realURL);
+  return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
+}
+
+function nghttpxPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+  originalRes.setHeader('link', '<' + realURL + '>; rel=preload');
+  return Promise.resolve();
+}
+
+function pushLogic(options, pushed) {
+  var pushStrategy = options.ngttpxMode ? nghttpxPushStrategy : defaultPushStrategy;
+  return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
+    var realURL = Url.resolve(url, href);
+    if (!pushed[realURL]) {
+      log('pushed: ' + realURL);
+      pushed[realURL] = true;
+      return pushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed);
+    } else {
+      return Promise.resolve();
+    }
+  };
 }
 
 function canHtmlImports(req) {
@@ -142,10 +162,12 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
     middleware(req, res, next);
     return Promise.resolve();
   }
+  var _push = pushLogic(options);
+
   return new Promise(function(resolve, reject) {
     if (options.relations[url]) {
       var promises = options.relations[url].map(function(href) {
-        return push(middleware, req, originalRes, next, options, url, href, log, pushed);
+        return _push(middleware, req, originalRes, next, options, url, href, log, pushed);
       });
       Promise.all(promises).then(resolve);
       middleware(req, res, next);
@@ -156,7 +178,7 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         } else if (href.indexOf('//') === 0) {
           return;
         }
-        return push(middleware, req, originalRes, next, options, url, href, log, pushed);
+        return _push(middleware, req, originalRes, next, options, url, href, log, pushed);
       };
       var newRes = pipeToParser(res, onResource, canHtmlImports(req), url, resolve, log);
       middleware(req, newRes, next);
