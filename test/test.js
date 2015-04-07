@@ -111,15 +111,12 @@ function testProxyMode(routes, options, accessURL, serverType, responseStrategy,
   var url = (serverType ? 'http' : 'https') + '://localhost:' + port + accessURL;
   _request.get(url)
     .on('response', function(response) {
-      response.on('data', function(data) {
-        if (options.mode === 'nghttpx') {
-          should.exist(response.headers['link']);
-        } else if (options.mode === 'mod_spdy') {
-          should.exist(response.headers['X-Associated-Content']);
-        }
-        done();
-      });
-
+      if (options.mode === 'nghttpx') {
+        should.exist(response.headers['link']);
+      } else if (options.mode === 'mod_spdy') {
+        should.exist(response.headers['X-Associated-Content']);
+      }
+      done();
     });
 }
 

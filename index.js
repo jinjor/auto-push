@@ -47,8 +47,6 @@ var ContentEncoding = {
 };
 
 function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEnd, log) {
-  // console.log(url);
-
   var parser = null;
   var originalWrite = res.write;
   var originalWriteHead = res.writeHead;
@@ -57,7 +55,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   var promises = [];
   var pushDone = false;
   var applyWrite = [];
-  var applyWriteHead = null;
 
   var NewRes = function() {};
   NewRes.prototype = res;
@@ -70,9 +67,11 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         return;
       }
       if(options.mode) {
-        applyWriteHead = function() {
-          originalWriteHead.apply(res, _arguments);
-        };
+        this.statusCode = _arguments[0];
+        _arguments[1] && Object.keys(_arguments[1]).forEach(function(key) {
+          var value = _arguments[1][key];
+          this.setHeader(key, value);
+        }.bind(this));
       } else {
         originalWriteHead.apply(res, _arguments);
       }
@@ -165,15 +164,11 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         }
       }
 
-      if (res._isOriginalRes && options.mode) {
+      if (options.mode && res._isOriginalRes) {
         if (this.nghttpxPush) { // TODO not pluggable...
-          argumentsForWriteHead
-
-
           var value = res.nghttpxPush.map(function(url) {
             return '<' + url + '>; rel=preload';
           }).join(',');
-
           originalSetHeader.apply(res, ['link', value]);
         } else if (res.modspdyPush) {
           var value = res.modspdyPush.map(function(url) {
@@ -181,7 +176,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           }).join(',');
           originalSetHeader.apply(res, ['X-Associated-Content', value]);
         }
-        applyWriteHead();
       }
       !pushDone && onPushEnd();
       Promise.all(promises).then(function() {
@@ -288,7 +282,7 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = true;
+  var debug = false;
   var log = debug ? console.log.bind(console) : function() {};
   return function(req, res, next) {
     var url = req.url;
@@ -297,7 +291,6 @@ var autoPush = function(middleware, options) {
     handleRequest(middleware, req, res, res, next, url, options, log, {});
   };
 };
-
 
 autoPush.private = {
   createHtmlParser: createHtmlParser,
