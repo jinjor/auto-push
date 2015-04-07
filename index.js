@@ -47,6 +47,8 @@ var ContentEncoding = {
 };
 
 function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
+  // console.log(url);
+
   var parser = null;
   var originalWrite = res.write;
   var originalWriteHead = res.writeHead;
@@ -60,111 +62,132 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   NewRes.prototype = res;
   var newRes = new NewRes();
   newRes.writeHead = function(status) {
-    if (this.stream.state === 'CLOSED') {
-      log('ignored(writeHead): ' + url);
-      return;
+    try {
+      if (this.stream && this.stream.state === 'CLOSED') {
+        log('ignored(writeHead): ' + url);
+        return;
+      }
+      originalWriteHead.apply(res, arguments);
+    } catch (e) {
+      console.log(e);
+      throw e;
     }
-    originalWriteHead.apply(res, arguments);
   };
   newRes.setHeader = function(key, value) {
-    var lowerKey = key.toLowerCase();
-    if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
-      return;
+    try {
+      var lowerKey = key.toLowerCase();
+      if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
+        return;
+      }
+      if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
+        !pushDone && onPushEnd();
+        pushDone = true;
+      }
+      originalSetHeader.apply(res, arguments);
+    } catch (e) {
+      console.log(e);
+      throw e;
     }
-    if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
-      !pushDone && onPushEnd();
-      pushDone = true;
-    }
-    originalSetHeader.apply(res, arguments);
   };
   newRes.write = function(data) {
-    if (this.stream.state === 'CLOSED') {
-      log('ignored(write): ' + url);
-      return;
-    }
-    var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
+    try {
+      if (this.stream && this.stream.state === 'CLOSED') {
+        log('ignored(write): ' + url);
+        return;
+      }
+      var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
 
-    var contentType = this.getHeader('content-type') || '';
-    var _arguments = arguments;
-    
-    if (ContentType.isHtml(contentType)) {
-      parser = parser || createHtmlParser(function() {
-        promises.push(onResource.apply(null, arguments));
-      }, null, enableHtmlImports);
-    } else if (ContentType.isCSS(contentType)) {
-      parser = parser || createCssParser(function() {
-        promises.push(onResource.apply(null, arguments));
-      });
-    }
-    if (parser) {
-      parser.write(data);
-      if (res._isOriginalRes) {
-        applyWrite.push(function() {
+      var contentType = this.getHeader('content-type') || '';
+      var _arguments = arguments;
+
+      if (ContentType.isHtml(contentType)) {
+        parser = parser || createHtmlParser(function() {
+          promises.push(onResource.apply(null, arguments));
+        }, null, enableHtmlImports);
+      } else if (ContentType.isCSS(contentType)) {
+        parser = parser || createCssParser(function() {
+          promises.push(onResource.apply(null, arguments));
+        });
+      }
+      if (parser) {
+        parser.write(data);
+        if (res._isOriginalRes) {
+          applyWrite.push(function() {
+            log('data: ' + url);
+            originalWrite.apply(res, _arguments);
+          });
+        } else {
           log('data: ' + url);
           originalWrite.apply(res, _arguments);
-        });
+        }
       } else {
+        !pushDone && onPushEnd();
+        pushDone = true;
         log('data: ' + url);
         originalWrite.apply(res, _arguments);
       }
-    } else {
-      !pushDone && onPushEnd();
-      pushDone = true;
-      log('data: ' + url);
-      originalWrite.apply(res, _arguments);
+    } catch (e) {
+      console.log(e);
+      throw e;
     }
   };
   newRes.__defineSetter__("statusCode", function(s) {
     res.statusCode = s;
   });
   newRes.end = function(data) {
-    if (this.stream.state === 'CLOSED') {
-      log('ignored(end): ' + url);
-      return;
-    }
+    try {
+      if (this.stream && this.stream.state === 'CLOSED') {
+        log('ignored(end): ' + url);
+        return;
+      }
+      var _arguments = arguments;
+      var contentType = this.getHeader('content-type') || '';
 
-    var _arguments = arguments;
+      if (data) {
+        if (ContentType.isHtml(contentType)) {
+          parser = parser || createHtmlParser(function() {
+            promises.push(onResource.apply(null, arguments));
+          }, null, enableHtmlImports);
+          parser.write(data);
+        } else if (ContentType.isCSS(contentType)) {
+          parser = parser || createCssParser(function() {
+            promises.push(onResource.apply(null, arguments));
+          });
+          parser.write(data);
+        }
+      }
 
-    var contentType = this.getHeader('content-type') || '';
+      if (res._isOriginalRes) {
+        if (this.nghttpxPush) { // TODO not pluggable...
 
-    if (data) {
-      if (ContentType.isHtml(contentType)) {
-        parser = parser || createHtmlParser(function() {
-          promises.push(onResource.apply(null, arguments));
-        }, null, enableHtmlImports);
-        parser.write(data);
-      } else if (ContentType.isCSS(contentType)) {
-        parser = parser || createCssParser(function() {
-          promises.push(onResource.apply(null, arguments));
+
+
+          var value = res.nghttpxPush.map(function(url) {
+            return '<' + url + '>; rel=preload';
+          }).join(',');
+
+          originalSetHeader.apply(res, ['link', value]);
+        } else if (res.modspdyPush) {
+          var value = res.modspdyPush.map(function(url) {
+            return '"' + url + '"';
+          }).join(',');
+          originalSetHeader.apply(res, ['X-Associated-Content', value]);
+        }
+      }
+      !pushDone && onPushEnd();
+      Promise.all(promises).then(function() {
+        applyWrite.forEach(function(f) {
+          f();
         });
-        parser.write(data);
-      }
-    }
-
-    if (res._isOriginalRes) {
-      if (res.nghttpxPush) { // TODO not pluggable...
-        var value = (res.nghttpxPush).map(function(url) {
-          return '<' + url + '>; rel=preload';
-        }).join(',');
-        originalSetHeader.apply(res, ['link', value]);
-      } else if (modspdyPush) {
-        var value = (res.modspdyPush).map(function(url) {
-          return '"' + url + '"';
-        }).join(',');
-        originalSetHeader.apply(res, ['X-Associated-Content', value]);
-      }
-    }
-
-    !pushDone && onPushEnd();
-
-    Promise.all(promises).then(function() {
-      applyWrite.forEach(function(f) {
-        f();
+        originalEnd.apply(res, _arguments);
+        log('end: ' + url);
       });
-      originalEnd.apply(res, _arguments);
-      log('end: ' + url);
-    });
+    } catch (e) {
+      console.log(e);
+      throw e;
+    }
   };
+  newRes.end.a = 789
   newRes._isOriginalRes = false;
 
   return newRes;
@@ -185,6 +208,10 @@ function createPushRequest(req, newURL) {
 }
 
 function defaultPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+  if (!originalRes.push) {
+    middleware(req, res, next);
+    return Promise.resolve();
+  }
   var push = originalRes.push(realURL);
   var pushRequest = createPushRequest(req, realURL);
   return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
@@ -203,7 +230,7 @@ function modSpdyPushStrategy(middleware, req, originalRes, next, options, realUR
 }
 
 function pushLogic(options) {
-  var pushStrategy = options.useNghttpx ? nghttpxPushStrategy : (options.useModSpdy ? modSpdyPushStrategy : defaultPushStrategy);
+  var pushStrategy = options.mode === 'nghttpx' ? nghttpxPushStrategy : (options.mode === 'mod_spdy' ? modSpdyPushStrategy : defaultPushStrategy);
   return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
     if (!pushed[realURL]) {
@@ -222,10 +249,7 @@ function canHtmlImports(req) {
 }
 
 function handleRequest(middleware, req, originalRes, res, next, url, options, log, pushed) {
-  if (!originalRes.push) {
-    middleware(req, res, next);
-    return Promise.resolve();
-  }
+
   var _push = pushLogic(options);
 
   return new Promise(function(resolve, reject) {
@@ -255,9 +279,8 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = false;
+  var debug = true;
   var log = debug ? console.log.bind(console) : function() {};
-
   return function(req, res, next) {
     var url = req.url;
     log(req.method + ' ' + url);

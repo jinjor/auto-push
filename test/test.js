@@ -2,7 +2,9 @@ var assert = require('assert');
 var autoPush = require('../index.js');
 var fs = require('fs');
 var http2 = require('http2');
-require('should');
+var http = require('http');
+var should = require('should');
+var request = require('request');
 
 var tlsOptions = {
   key: fs.readFileSync(__dirname + '/ssl/key.pem'),
@@ -11,14 +13,13 @@ var tlsOptions = {
 
 var port = 8100;
 
-function createServer(routes, options, responseStrategy) {
-  return http2.createServer(tlsOptions, autoPush(function(req, res) {
+function createServer(serverType, routes, options, responseStrategy) {
+
+  var middleware = autoPush(function(req, res) {
     var data = routes[req.url];
     var status = data.status || 200;
     var contentType = data.contentType || 'text/html';
     var content = data.content;
-
-
     if (!responseStrategy) {
       res.writeHead(status, {
         'content-type': contentType
@@ -31,11 +32,18 @@ function createServer(routes, options, responseStrategy) {
       res.end();
     }
 
-  }, options));
+
+  }, options);
+
+  if (!serverType) {
+    return http2.createServer(tlsOptions, middleware);
+  } else if (serverType === 1) {
+    return http.createServer(middleware);
+  }
 }
 
 function testSingleResource(routes, options, accessURL, responseStrategy, wontPush, done) {
-  var server = createServer(routes, options, responseStrategy);
+  var server = createServer(0, routes, options, responseStrategy);
   server.listen(++port);
 
   var subresourceCount = Object.keys(routes).length - 1;
@@ -95,7 +103,25 @@ function testSingleResource(routes, options, accessURL, responseStrategy, wontPu
   });
 }
 
+function testProxyMode(routes, options, accessURL, serverType, responseStrategy, done) {
+  var server = createServer(serverType, routes, options, responseStrategy);
+  server.listen(++port);
 
+  var _request = serverType ? request : http2;
+  var url = (serverType ? 'http' : 'https') + '://localhost:' + port + accessURL;
+  _request.get(url)
+    .on('response', function(response) {
+      response.on('data', function(data) {
+        if (options.mode === 'nghttpx') {
+          should.exist(response.headers['link']);
+        } else if (options.mode === 'mod_spdy') {
+          should.exist(response.headers['X-Associated-Content']);
+        }
+        done();
+      });
+
+    });
+}
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -381,7 +407,47 @@ describe('auto-push', function() {
       '/a.jpeg': {
         content: '_'
       }
-    }, null, '/', 0, false, done);
+    }, null, '/', 1, false, done);
+  });
+
+  it('should work on nghttpx mode', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'nghttpx'
+    }, '/', 0, 0, done);
+  });
+
+  it('should work on nghttpx mode --server1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'nghttpx'
+    }, '/', 1, 0, done);
+  });
+
+  it('should work on nghttpx mode --strategy1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'nghttpx'
+    }, '/', 0, 1, done);
+  });
+
+  it('should work on nghttpx mode --server1 --strategy1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'nghttpx'
+    }, '/', 1, 1, done);
   });
 
 

@@ -13,7 +13,9 @@ var options = {
 };
 
 function sample0() {
-  http2.createServer(options, autoPush(_static())).listen(8443);
+  http2.createServer(options, autoPush(_static(), {
+    mode: 'nghttpx'
+  })).listen(8443);
 }
 
 function sample1() {
