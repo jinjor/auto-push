@@ -18,12 +18,15 @@ function createServer(routes, options, responseStrategy) {
     var contentType = data.contentType || 'text/html';
     var content = data.content;
 
-    res.writeHead(status, {
-      'content-type': contentType
-    });
+
     if (!responseStrategy) {
+      res.writeHead(status, {
+        'content-type': contentType
+      });
       res.end(content);
     } else if (responseStrategy === 1) {
+      res.statusCode = status;
+      res.setHeader('content-type', contentType);
       res.write(content);
       res.end();
     }
@@ -115,7 +118,8 @@ describe('auto-push', function() {
         content: '<link rel="stylesheet" href="/app.css"></link>'
       },
       '/app.css': {
-        content: 'body { color: red; }'
+        content: 'body { color: red; }',
+        contentType: 'text/css'
       }
     }, null, '/', 0, false, done);
   });
@@ -159,7 +163,8 @@ describe('auto-push', function() {
         content: '<link rel="stylesheet" href="/app.css"></link>'
       },
       '/app.css': {
-        content: 'body { color: red; }'
+        content: 'body { color: red; }',
+        contentType: 'text/css'
       }
     }, null, '/', 1, false, done);
   });
