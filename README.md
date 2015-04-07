@@ -15,11 +15,19 @@ function(req, res, next) {
 
 ## Ability
 
+This module recursively find resources and push for each of them.
+
 <img src="ability.png" alt="ability.png" title="ability.png" height="350"/>
+
+## Usage
+
+This module works for several use cases.
+
+<img src="usage.png" alt="usage.png" title="usage.png" height="350"/>
 
 ## Example
 
-### Work with a server
+### As an application server
 
 ```javascript
 var fs = require('fs');
@@ -60,4 +68,39 @@ http2.createServer(options, autoPush(function(req, res) {
     headers: req.headers
   }).pipe(res);
 })).listen(8443);
+```
+
+### As an application server with reverse proxy
+
+With this option, the server sends additional response header and let the proxy server push resources.
+
+Limitation: only the shallowest sub-resources are the target.
+
+```javascript
+var autoPush = require('auto-push');
+var http = require('http');
+
+// server
+http.createServer(autoPush(function(req, res) {
+  request({
+    method: req.method,
+    url: 'http://localhost:8080' + req.url,
+    headers: req.headers
+  }).pipe(res);
+}, {
+  mode: 'nghttpx'
+})).listen(8080);
+```
+
+## API
+
+The second argument is optional.
+
+```javascript
+var options = {
+  // Modes
+  mode: 'nghttpx'// use nghttpx as a reverse proxy
+  mode: 'mod_spdy'// use htdpd (with mod_spdy) as a reverse proxy
+
+};
 ```
