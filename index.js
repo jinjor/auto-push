@@ -46,7 +46,7 @@ var ContentEncoding = {
   }
 };
 
-function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
+function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEnd, log) {
   // console.log(url);
 
   var parser = null;
@@ -57,17 +57,25 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var promises = [];
   var pushDone = false;
   var applyWrite = [];
+  var applyWriteHead = null;
 
   var NewRes = function() {};
   NewRes.prototype = res;
   var newRes = new NewRes();
   newRes.writeHead = function(status) {
     try {
+      var _arguments = arguments;
       if (this.stream && this.stream.state === 'CLOSED') {
         log('ignored(writeHead): ' + url);
         return;
       }
-      originalWriteHead.apply(res, arguments);
+      if(options.mode) {
+        applyWriteHead = function() {
+          originalWriteHead.apply(res, _arguments);
+        };
+      } else {
+        originalWriteHead.apply(res, _arguments);
+      }
     } catch (e) {
       console.log(e);
       throw e;
@@ -157,9 +165,9 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
         }
       }
 
-      if (res._isOriginalRes) {
+      if (res._isOriginalRes && options.mode) {
         if (this.nghttpxPush) { // TODO not pluggable...
-
+          argumentsForWriteHead
 
 
           var value = res.nghttpxPush.map(function(url) {
@@ -173,6 +181,7 @@ function pipeToParser(res, onResource, enableHtmlImports, url, onPushEnd, log) {
           }).join(',');
           originalSetHeader.apply(res, ['X-Associated-Content', value]);
         }
+        applyWriteHead();
       }
       !pushDone && onPushEnd();
       Promise.all(promises).then(function() {
@@ -268,7 +277,7 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         }
         return _push(middleware, req, originalRes, next, options, url, href, log, pushed);
       };
-      var newRes = pipeToParser(res, onResource, canHtmlImports(req), url, resolve, log);
+      var newRes = pipeToParser(options, res, onResource, canHtmlImports(req), url, resolve, log);
       middleware(req, newRes, next);
     }
   });
