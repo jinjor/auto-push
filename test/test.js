@@ -449,6 +449,36 @@ describe('auto-push', function() {
     }, null, '/', 1, false, done);
   });
 
+  it('should dedupe', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="stylesheet" href="foo/a.css"></link><img src="foo/a.jpeg"></img>'
+      },
+      '/foo/a.css': {
+        contentType: 'text/css',
+        content: 'body { background: url("a.jpeg"); }'
+      },
+      '/foo/a.jpeg': {
+        content: '_'
+      }
+    }, null, '/', 0, false, done);
+  });
+
+  it('should dedupe --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="stylesheet" href="foo/a.css"></link><img src="foo/a.jpeg"></img>'
+      },
+      '/foo/a.css': {
+        contentType: 'text/css',
+        content: 'body { background: url("a.jpeg"); }'
+      },
+      '/foo/a.jpeg': {
+        content: '_'
+      }
+    }, null, '/', 1, false, done);
+  });
+
   it('should work on nghttpx mode', function(done) {
     testProxyMode({
       '/': {
