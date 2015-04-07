@@ -227,7 +227,7 @@ function nghttpxPushStrategy(middleware, req, originalRes, next, options, realUR
 }
 
 function modSpdyPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
-  originalRes.modspdyPush = originalRes.nghttpxPush || [];
+  originalRes.modspdyPush = originalRes.modspdyPush || [];
   originalRes.modspdyPush.push(realURL);
   return Promise.resolve();
 }
