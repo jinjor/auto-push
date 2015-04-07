@@ -66,7 +66,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         log('ignored(writeHead): ' + url);
         return;
       }
-      if(options.mode) {
+      if (options.mode) {
         this.statusCode = _arguments[0];
         var header = _arguments[1];
         header && Object.keys(header).forEach(function(key) {
@@ -91,6 +91,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         !pushDone && onPushEnd();
         pushDone = true;
       }
+
       originalSetHeader.apply(res, arguments);
     } catch (e) {
       console.log(e);
@@ -164,7 +165,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           parser.write(data);
         }
       }
-
       if (options.mode && res._isOriginalRes) {
         if (this.nghttpxPush) { // TODO not pluggable...
           var value = res.nghttpxPush.map(function(url) {
@@ -177,8 +177,8 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           }).join(',');
           originalSetHeader.apply(res, ['X-Associated-Content', value]);
         }
-      }
-      !pushDone && onPushEnd();
+      }!pushDone && onPushEnd();
+
       Promise.all(promises).then(function() {
         applyWrite.forEach(function(f) {
           f();
@@ -191,7 +191,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       throw e;
     }
   };
-  newRes.end.a = 789
   newRes._isOriginalRes = false;
 
   return newRes;
@@ -213,7 +212,7 @@ function createPushRequest(req, newURL) {
 
 function defaultPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
   if (!originalRes.push) {
-    middleware(req, res, next);
+    middleware(req, originalRes, next);
     return Promise.resolve();
   }
   var push = originalRes.push(realURL);
@@ -253,6 +252,11 @@ function canHtmlImports(req) {
 }
 
 function handleRequest(middleware, req, originalRes, res, next, url, options, log, pushed) {
+
+  if (!originalRes.push && !options.mode) {
+    middleware(req, originalRes, next);
+    return Promise.resolve();
+  }
 
   var _push = pushLogic(options);
 
