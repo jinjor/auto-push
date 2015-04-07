@@ -103,7 +103,7 @@ function testSingleResource(routes, options, accessURL, responseStrategy, wontPu
   });
 }
 
-function testProxyMode(routes, options, accessURL, serverType, responseStrategy, done) {
+function testProxyMode(routes, options, accessURL, expectedURLs, serverType, responseStrategy, done) {
   var server = createServer(serverType, routes, options, responseStrategy);
   server.listen(++port);
 
@@ -112,9 +112,17 @@ function testProxyMode(routes, options, accessURL, serverType, responseStrategy,
   _request.get(url)
     .on('response', function(response) {
       if (options.mode === 'nghttpx') {
+        var expects = expectedURLs.map(function(url) {
+          return '<' + url + '>; rel=preload';
+        }).join(',');
         should.exist(response.headers['link']);
+        response.headers['link'].should.equal(expects);
       } else if (options.mode === 'mod_spdy') {
-        should.exist(response.headers['X-Associated-Content']);
+        var expects = expectedURLs.map(function(url) {
+          return '"' + url + '"';
+        }).join(',');
+        should.exist(response.headers['x-associated-content']);
+        response.headers['x-associated-content'].should.equal(expects);
       }
       done();
     });
@@ -414,7 +422,7 @@ describe('auto-push', function() {
       }
     }, {
       mode: 'nghttpx'
-    }, '/', 0, 0, done);
+    }, '/', ['/app.css'], 0, 0, done);
   });
 
   it('should work on nghttpx mode --server1', function(done) {
@@ -424,7 +432,7 @@ describe('auto-push', function() {
       }
     }, {
       mode: 'nghttpx'
-    }, '/', 1, 0, done);
+    }, '/', ['/app.css'], 1, 0, done);
   });
 
   it('should work on nghttpx mode --strategy1', function(done) {
@@ -434,7 +442,7 @@ describe('auto-push', function() {
       }
     }, {
       mode: 'nghttpx'
-    }, '/', 0, 1, done);
+    }, '/', ['/app.css'], 0, 1, done);
   });
 
   it('should work on nghttpx mode --server1 --strategy1', function(done) {
@@ -444,8 +452,47 @@ describe('auto-push', function() {
       }
     }, {
       mode: 'nghttpx'
-    }, '/', 1, 1, done);
+    }, '/', ['/app.css'], 1, 1, done);
   });
 
+  it('should work on mod_spdy mode', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'mod_spdy'
+    }, '/', ['/app.css'], 0, 0, done);
+  });
+
+  it('should work on mod_spdy mode --server1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'mod_spdy'
+    }, '/', ['/app.css'], 1, 0, done);
+  });
+
+  it('should work on mod_spdy mode --strategy1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'mod_spdy'
+    }, '/', ['/app.css'], 0, 1, done);
+  });
+
+  it('should work on mod_spdy mode --server1 --strategy1', function(done) {
+    testProxyMode({
+      '/': {
+        content: '<link rel="stylesheet" href="app.css"></link>'
+      }
+    }, {
+      mode: 'mod_spdy'
+    }, '/', ['/app.css'], 1, 1, done);
+  });
 
 });

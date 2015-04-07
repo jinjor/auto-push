@@ -68,8 +68,9 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       }
       if(options.mode) {
         this.statusCode = _arguments[0];
-        _arguments[1] && Object.keys(_arguments[1]).forEach(function(key) {
-          var value = _arguments[1][key];
+        var header = _arguments[1];
+        header && Object.keys(header).forEach(function(key) {
+          var value = header[key];
           this.setHeader(key, value);
         }.bind(this));
       } else {
