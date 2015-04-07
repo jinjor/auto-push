@@ -68,6 +68,10 @@ describe('css-url-finder', function() {
     assertSingle2('body { background: url("foo/bar-_0123ABC.png"); }', 'foo/bar-_0123ABC.png', done);
   });
 
+  it('should parse multi urls in a line', function(done) {
+    assertMulti('body { background: url ("a.png"); } div:nth-child(2) { background: url ("b.jpg"); }', ['a.png', 'b.jpg'], done);
+  });
+
   function assertSingle(line, expectedUrl, done) {
     var url = '';
     var s = new stream.Readable();
@@ -86,6 +90,21 @@ describe('css-url-finder', function() {
     finder.on('data', function(url) {
       url.toString().should.equal(expectedUrl);
       done();
+    });
+    finder.write(line);
+  }
+
+  function assertMulti(line, expectedUrls, done) {
+    var finder = new CssUrlFinder();
+    var results = [];
+    finder.on('data', function(url) {
+      results.push(url);
+      if(results.length === expectedUrls.length) {
+        results.forEach(function(url, i) {
+          url.toString().should.equal(expectedUrls[i]);
+        });
+        done();
+      }
     });
     finder.write(line);
   }

@@ -37,8 +37,8 @@ CssUrlFinder.prototype._transform = function(chunk, encoding, done) {
   // console.log(chunk, encoding, done);
   chunk = this.fragment ? Buffer.concat([this.fragment, chunk]) : chunk;
   for (var i = 0; i < chunk.length; i++) {
-    if (chunk[i] === 10) { // '\n'
-      var line = chunk.slice(0, i).toString();
+    if (chunk[i] === 41) { // ')'
+      var line = chunk.slice(0, i + 1).toString();
       var url = getUrl(line);
       if (url) {
         this.push(url);
