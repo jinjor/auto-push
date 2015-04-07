@@ -48,7 +48,14 @@ function testSingleResource(routes, options, accessURL, responseStrategy, wontPu
 
   var subresourceCount = Object.keys(routes).length - 1;
 
-  var request = http2.get('https://localhost:' + port + accessURL);
+  var request = http2.get({
+    hostname: 'localhost',
+    port: port,
+    path: accessURL,
+    headers: {
+      'user-agent': 'chrome'
+    }
+  });
 
   var pushedRequestCount = 0;
   var pushedResponseCount = 0;
@@ -109,23 +116,22 @@ function testProxyMode(routes, options, accessURL, expectedURLs, serverType, res
 
   var _request = serverType ? request : http2;
   var url = (serverType ? 'http' : 'https') + '://localhost:' + port + accessURL;
-  _request.get(url)
-    .on('response', function(response) {
-      if (options.mode === 'nghttpx') {
-        var expects = expectedURLs.map(function(url) {
-          return '<' + url + '>; rel=preload';
-        }).join(',');
-        should.exist(response.headers['link']);
-        response.headers['link'].should.equal(expects);
-      } else if (options.mode === 'mod_spdy') {
-        var expects = expectedURLs.map(function(url) {
-          return '"' + url + '"';
-        }).join(',');
-        should.exist(response.headers['x-associated-content']);
-        response.headers['x-associated-content'].should.equal(expects);
-      }
-      done();
-    });
+  _request.get(url).on('response', function(response) {
+    if (options.mode === 'nghttpx') {
+      var expects = expectedURLs.map(function(url) {
+        return '<' + url + '>; rel=preload';
+      }).join(',');
+      should.exist(response.headers['link']);
+      response.headers['link'].should.equal(expects);
+    } else if (options.mode === 'mod_spdy') {
+      var expects = expectedURLs.map(function(url) {
+        return '"' + url + '"';
+      }).join(',');
+      should.exist(response.headers['x-associated-content']);
+      response.headers['x-associated-content'].should.equal(expects);
+    }
+    done();
+  });
 }
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -410,6 +416,34 @@ describe('auto-push', function() {
         content: 'body { background: url("a.jpeg"); }'
       },
       '/a.jpeg': {
+        content: '_'
+      }
+    }, null, '/', 1, false, done);
+  });
+
+  it('should support HTML Imports', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="import" href="a.html"></link>'
+      },
+      '/a.html': {
+        content: '<link rel="import" href="b.html"></link>'
+      },
+      '/b.html': {
+        content: '_'
+      }
+    }, null, '/', 0, false, done);
+  });
+
+  it('should support HTML Imports --strategy1', function(done) {
+    testSingleResource({
+      '/': {
+        content: '<link rel="import" href="a.html"></link>'
+      },
+      '/a.html': {
+        content: '<link rel="import" href="b.html"></link>'
+      },
+      '/b.html': {
         content: '_'
       }
     }, null, '/', 1, false, done);
