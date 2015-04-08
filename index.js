@@ -25,7 +25,9 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   var originalWrite = parser.write;
   parser.write = function(data, chunk, callback) {
     originalWrite.apply(parser, arguments);
-    callback && callback();
+    setImmediate(function() {
+      callback && callback();
+    });
   };
   return parser;
 }
@@ -58,6 +60,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   var originalWriteHead = res.writeHead;
   var originalSetHeader = res.setHeader;
   var originalEnd = res.end;
+  var writePromises = [];
   var promises = [];
   var pushDone = false;
   var applyWrite = [];
@@ -125,17 +128,21 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         });
       }
       if (parser) {
-        parser.write(data, null, function(){
-          if (res._isOriginalRes && options.mode) {
-            applyWrite.push(function() {// after setHeader
+        var p = new Promise(function(resolve) {
+          parser.write(data, null, function() {
+            if (res._isOriginalRes && options.mode) {
+              applyWrite.push(function() { // after setHeader
+                log('data: ' + url);
+                originalWrite.apply(res, _arguments);
+              });
+            } else {
               log('data: ' + url);
               originalWrite.apply(res, _arguments);
-            });
-          } else {
-            log('data: ' + url);
-            originalWrite.apply(res, _arguments);
-          }
+            }
+            resolve();
+          });
         });
+        writePromises.push(p);
       } else {
         !pushDone && onPushEnd();
         pushDone = true;
@@ -159,6 +166,32 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       var _arguments = arguments;
       var contentType = this.getHeader('content-type') || '';
 
+      var after = function() {
+        if (options.mode && res._isOriginalRes) {
+          if (this.nghttpxPush) { // TODO not pluggable...
+            var value = res.nghttpxPush.map(function(url) {
+              return '<' + url + '>; rel=preload';
+            }).join(',');
+            originalSetHeader.apply(res, ['link', value]);
+          } else if (res.modspdyPush) {
+            var value = res.modspdyPush.map(function(url) {
+              return '"' + url + '"';
+            }).join(',');
+            originalSetHeader.apply(res, ['X-Associated-Content', value]);
+          }
+          applyWrite.forEach(function(f) {
+            f();
+          });
+        }
+        //
+        !pushDone && onPushEnd();
+
+        Promise.all(promises.concat(writePromises)).then(function() {
+          originalEnd.apply(res, _arguments);
+          log('end: ' + url);
+        });
+      }.bind(this);
+
       if (data) {
         if (ContentType.isHtml(contentType)) {
           parser = parser || createHtmlParser(function() {
@@ -169,29 +202,13 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
             promises.push(onResource.apply(null, arguments));
           });
         }
-        parser.write(data);
-      }
-      if (options.mode && res._isOriginalRes) {
-        if (this.nghttpxPush) { // TODO not pluggable...
-          var value = res.nghttpxPush.map(function(url) {
-            return '<' + url + '>; rel=preload';
-          }).join(',');
-          originalSetHeader.apply(res, ['link', value]);
-        } else if (res.modspdyPush) {
-          var value = res.modspdyPush.map(function(url) {
-            return '"' + url + '"';
-          }).join(',');
-          originalSetHeader.apply(res, ['X-Associated-Content', value]);
-        }
-      }!pushDone && onPushEnd();
-
-      Promise.all(promises).then(function() {
-        applyWrite.forEach(function(f) {
-          f();
+        Promise.all(writePromises).then(function() {
+          parser.write(data, null, after);
         });
-        originalEnd.apply(res, _arguments);
-        log('end: ' + url);
-      });
+      } else {
+        after();
+      }
+
     } catch (e) {
       console.log(e);
       throw e;
