@@ -24,10 +24,11 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   });
   var originalWrite = parser.write;
   parser.write = function(data, chunk, callback) {
-    originalWrite.apply(parser, arguments);
-    setImmediate(function() {
-      callback && callback();
-    });
+    var _arguments = arguments;
+    originalWrite.apply(parser, _arguments);
+    // setImmediate(function() {
+    callback && callback();
+    // });
   };
   return parser;
 }
@@ -53,6 +54,16 @@ var ContentEncoding = {
     return value.toLowerCase().indexOf('gzip') >= 0;
   }
 };
+var logCatch = function(f) {
+  return function() {
+    try {
+      f.apply(this, arguments)
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
+};
 
 function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEnd, log) {
   var parser = null;
@@ -65,155 +76,134 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   var pushDone = false;
   var applyWrite = [];
 
+  var _onResource = function() {
+    promises.push(onResource.apply(null, arguments));
+  };
+  var setParser = function(contentType) {
+    if (ContentType.isHtml(contentType)) {
+      parser = parser || createHtmlParser(_onResource, null, enableHtmlImports);
+    } else if (ContentType.isCSS(contentType)) {
+      parser = parser || createCssParser(_onResource);
+    }
+  };
+  var setHeaderForReverseProxy = function(res) {
+    if (res.nghttpxPush) { // TODO not pluggable...
+      var value = res.nghttpxPush.map(function(url) {
+        return '<' + url + '>; rel=preload';
+      }).join(',');
+      originalSetHeader.apply(res, ['link', value]);
+    } else if (res.modspdyPush) {
+      var value = res.modspdyPush.map(function(url) {
+        return '"' + url + '"';
+      }).join(',');
+      originalSetHeader.apply(res, ['X-Associated-Content', value]);
+    }
+  };
+  var isClosed = function(res) {
+    if (res.stream && res.stream.state === 'CLOSED') {
+      log('ignored: ' + url);
+      return true;
+    }
+    return false;
+  };
+  var assurePushEnd = function() {
+    !pushDone && onPushEnd();
+    pushDone = true;
+  };
+
   var NewRes = function() {};
   NewRes.prototype = res;
   var newRes = new NewRes();
-  newRes.writeHead = function(status) {
-    try {
-      var _arguments = arguments;
-      if (this.stream && this.stream.state === 'CLOSED') {
-        log('ignored(writeHead): ' + url);
-        return;
-      }
-      if (options.mode) {
-        this.statusCode = _arguments[0];
-        var header = _arguments[1];
-        header && Object.keys(header).forEach(function(key) {
-          var value = header[key];
-          this.setHeader(key, value);
-        }.bind(this));
-      } else {
-        originalWriteHead.apply(res, _arguments);
-      }
-    } catch (e) {
-      console.log(e);
-      throw e;
+  newRes.writeHead = logCatch(function(status) {
+    var _arguments = arguments;
+    if (isClosed(this)) {
+      return;
     }
-  };
-  newRes.setHeader = function(key, value) {
-    try {
-      var lowerKey = key.toLowerCase();
-      if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
-        return;
-      }
-      if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
-        !pushDone && onPushEnd();
-        pushDone = true;
-      }
-
-      originalSetHeader.apply(res, arguments);
-    } catch (e) {
-      console.log(e);
-      throw e;
+    if (options.mode) {
+      this.statusCode = _arguments[0];
+      var header = _arguments[1];
+      header && Object.keys(header).forEach(function(key) {
+        var value = header[key];
+        this.setHeader(key, value);
+      }.bind(this));
+    } else {
+      originalWriteHead.apply(res, _arguments);
     }
-  };
-  newRes.write = function(data) {
-    try {
-      if (this.stream && this.stream.state === 'CLOSED') {
-        log('ignored(write): ' + url);
-        return;
-      }
-      var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
+  });
+  newRes.setHeader = logCatch(function(key, value) {
+    var lowerKey = key.toLowerCase();
+    if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
+      return;
+    }
+    if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
+      assurePushEnd();
+    }
+    originalSetHeader.apply(res, arguments);
+  });
+  newRes.write = logCatch(function(data) {
+    if (isClosed(this)) {
+      return;
+    }
+    var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
 
-      var contentType = this.getHeader('content-type') || '';
-      var _arguments = arguments;
+    var contentType = this.getHeader('content-type') || '';
+    var _arguments = arguments;
+    var _write = function() {
+      log('data: ' + url);
+      originalWrite.apply(res, _arguments);
+    };
 
-      if (ContentType.isHtml(contentType)) {
-        parser = parser || createHtmlParser(function() {
-          promises.push(onResource.apply(null, arguments));
-        }, null, enableHtmlImports);
-      } else if (ContentType.isCSS(contentType)) {
-        parser = parser || createCssParser(function() {
-          promises.push(onResource.apply(null, arguments));
+    setParser(contentType);
+    if (parser) {
+      if (res._isOriginalRes && options.mode) {
+        parser.write(data, null, function() {
+          applyWrite.push(_write);
         });
-      }
-      if (parser) {
-        var p = new Promise(function(resolve) {
+      } else {
+        writePromises.push(new Promise(function(resolve) {
           parser.write(data, null, function() {
-            if (res._isOriginalRes && options.mode) {
-              applyWrite.push(function() { // after setHeader
-                log('data: ' + url);
-                originalWrite.apply(res, _arguments);
-              });
-            } else {
-              log('data: ' + url);
-              originalWrite.apply(res, _arguments);
-            }
+            _write();
             resolve();
           });
-        });
-        writePromises.push(p);
-      } else {
-        !pushDone && onPushEnd();
-        pushDone = true;
-        log('data: ' + url);
-        originalWrite.apply(res, _arguments);
+        }));
       }
-    } catch (e) {
-      console.log(e);
-      throw e;
+    } else {
+      assurePushEnd();
+      _write();
     }
-  };
+  });
   newRes.__defineSetter__("statusCode", function(s) {
     res.statusCode = s;
   });
-  newRes.end = function(data) {
-    try {
-      if (this.stream && this.stream.state === 'CLOSED') {
-        log('ignored(end): ' + url);
-        return;
-      }
-      var _arguments = arguments;
-      var contentType = this.getHeader('content-type') || '';
-
-      var after = function() {
-        if (options.mode && res._isOriginalRes) {
-          if (this.nghttpxPush) { // TODO not pluggable...
-            var value = res.nghttpxPush.map(function(url) {
-              return '<' + url + '>; rel=preload';
-            }).join(',');
-            originalSetHeader.apply(res, ['link', value]);
-          } else if (res.modspdyPush) {
-            var value = res.modspdyPush.map(function(url) {
-              return '"' + url + '"';
-            }).join(',');
-            originalSetHeader.apply(res, ['X-Associated-Content', value]);
-          }
-          applyWrite.forEach(function(f) {
-            f();
-          });
-        }
-        //
-        !pushDone && onPushEnd();
-
-        Promise.all(promises.concat(writePromises)).then(function() {
-          originalEnd.apply(res, _arguments);
-          log('end: ' + url);
-        });
-      }.bind(this);
-
-      if (data) {
-        if (ContentType.isHtml(contentType)) {
-          parser = parser || createHtmlParser(function() {
-            promises.push(onResource.apply(null, arguments));
-          }, null, enableHtmlImports);
-        } else if (ContentType.isCSS(contentType)) {
-          parser = parser || createCssParser(function() {
-            promises.push(onResource.apply(null, arguments));
-          });
-        }
-        Promise.all(writePromises).then(function() {
-          parser.write(data, null, after);
-        });
-      } else {
-        after();
-      }
-
-    } catch (e) {
-      console.log(e);
-      throw e;
+  newRes.end = logCatch(function(data) {
+    if (isClosed(this)) {
+      return;
     }
-  };
+    var _arguments = arguments;
+    var contentType = this.getHeader('content-type') || '';
+
+    if (data) {
+      setParser(contentType);
+      if (parser) {
+        writePromises.push(new Promise(function(resolve) {
+          parser.write(data, null, resolve);
+        }));
+      }
+    }
+    Promise.all(promises).then(function() {
+      if (options.mode && res._isOriginalRes) {
+        setHeaderForReverseProxy(res);
+        applyWrite.forEach(function(f) {
+          f();
+        });
+      }
+      assurePushEnd();
+      Promise.all(writePromises).then(function() {
+        originalEnd.apply(res, _arguments);
+        log('end: ' + url);
+      });
+    }.bind(this));
+  });
   newRes._isOriginalRes = false;
 
   return newRes;
