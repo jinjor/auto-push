@@ -89,9 +89,10 @@ describe('css-url-finder', function() {
     var finder = new CssUrlFinder();
     finder.on('data', function(url) {
       url.toString().should.equal(expectedUrl);
+    });
+    finder.write(line, null, function(){
       done();
     });
-    finder.write(line);
   }
 
   function assertMulti(line, expectedUrls, done) {

@@ -8,7 +8,7 @@ var assert = require('assert');
 var CssUrlFinder = require('./css-url-finder.js');
 
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
-  return new htmlparser2.Parser({
+  var parser = new htmlparser2.Parser({
     onopentag: function(name, attribs) {
       if (name === 'script' && attribs.src) {
         onResource(attribs.src);
@@ -22,6 +22,12 @@ function createHtmlParser(onResource, onEnd, enableHtmlImports) {
     },
     onend: onEnd
   });
+  var originalWrite = parser.write;
+  parser.write = function(data, chunk, callback) {
+    originalWrite.apply(parser, arguments);
+    callback && callback();
+  };
+  return parser;
 }
 
 function createCssParser(onResource) {
@@ -119,16 +125,17 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         });
       }
       if (parser) {
-        parser.write(data);
-        if (res._isOriginalRes) {
-          applyWrite.push(function() {
+        parser.write(data, null, function(){
+          if (res._isOriginalRes && options.mode) {
+            applyWrite.push(function() {// after setHeader
+              log('data: ' + url);
+              originalWrite.apply(res, _arguments);
+            });
+          } else {
             log('data: ' + url);
             originalWrite.apply(res, _arguments);
-          });
-        } else {
-          log('data: ' + url);
-          originalWrite.apply(res, _arguments);
-        }
+          }
+        });
       } else {
         !pushDone && onPushEnd();
         pushDone = true;
@@ -157,13 +164,12 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           parser = parser || createHtmlParser(function() {
             promises.push(onResource.apply(null, arguments));
           }, null, enableHtmlImports);
-          parser.write(data);
         } else if (ContentType.isCSS(contentType)) {
           parser = parser || createCssParser(function() {
             promises.push(onResource.apply(null, arguments));
           });
-          parser.write(data);
         }
+        parser.write(data);
       }
       if (options.mode && res._isOriginalRes) {
         if (this.nghttpxPush) { // TODO not pluggable...
@@ -287,7 +293,7 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = false;
+  var debug = true;
   var log = debug ? console.log.bind(console) : function() {};
   return function(req, res, next) {
     var url = req.url;

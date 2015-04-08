@@ -10,6 +10,7 @@
   "dependencies": {
     "htmlparser2": "^3.8.2",
     "object-assign": "^2.0.0",
+    "sax": "^0.6.1",
     "through2": "^0.6.3"
   },
   "repository": {
