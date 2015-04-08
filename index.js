@@ -5,7 +5,9 @@ var through2 = require('through2');
 var assign = require('object-assign');
 var Url = require('url');
 var assert = require('assert');
+var zlib = require('zlib');
 var CssUrlFinder = require('./css-url-finder.js');
+
 
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   var parser = new htmlparser2.Parser({
@@ -129,7 +131,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     } else {
       originalWriteHead.apply(res, _arguments);
       setParser(this.getHeader('content-type') || '');
-      if(!parser) {
+      if (!parser) {
         assurePushEnd();
       }
     }
@@ -141,17 +143,48 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     }
     if (key.toLowerCase() === 'content-type') {
       setParser(value);
-      if(!parser) {
+      if (!parser) {
         assurePushEnd();
       }
     }
     originalSetHeader.apply(res, arguments);
   });
+
+  var writeGunzip = null;
+  var setGunzipWriter = function(res) {
+    if (writeGunzip) {
+      return;
+    }
+    var gziped = ContentEncoding.isGzip(res.getHeader('content-encoding') || '');
+    if (!gziped) {
+      return;
+    }
+    var gunzip = zlib.createGunzipStream();
+    var queue = [];
+    gunzip.on('data', function(data) {
+      queue.push(data);
+      console.log(data.toString());
+    });
+    writeGunzip = function(data, callback) {
+      gunzip.write(data, null, function() {
+        var _queue = queue;
+        queue = [];
+        _queue.forEach(callback);
+      });
+    };
+  };
+  var _unzip = function(data, callback) {
+    if (writeGunzip) {
+      writeGunzip(data, callback)
+    } else {
+      callback(data);
+    }
+  };
+
   newRes.write = logCatch(function(data) {
     if (isClosed(this)) {
       return;
     }
-    var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
     var _arguments = arguments;
     var _write = function() {
       log('data: ' + url);
@@ -160,18 +193,22 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
 
     setParser(this.getHeader('content-type') || '');
     if (parser) {
-      if (res._isOriginalRes && options.mode) {
-        parser.write(data, null, function() {
-          applyWrite.push(_write);
-        });
-      } else {
-        writePromises.push(new Promise(function(resolve) {
+      setGunzipWriter(this);
+      _unzip(data, function(data) {
+        if (res._isOriginalRes && options.mode) {
           parser.write(data, null, function() {
-            _write();
-            resolve();
+            applyWrite.push(_write.bind(null, _arguments));
           });
-        }));
-      }
+        } else {
+          writePromises.push(new Promise(function(resolve) {
+            parser.write(data, null, function() {
+              _write();
+              resolve();
+            });
+          }));
+        }
+      });
+
     } else {
       assurePushEnd();
       _write();
@@ -189,8 +226,11 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (data) {
       setParser(this.getHeader('content-type') || '');
       if (parser) {
+        setGunzipWriter(this);
         writePromises.push(new Promise(function(resolve) {
-          parser.write(data, null, resolve);
+          _unzip(data, function(data) {
+            parser.write(data, null, resolve);
+          });
         }));
       }
     }
