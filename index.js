@@ -128,6 +128,10 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       }.bind(this));
     } else {
       originalWriteHead.apply(res, _arguments);
+      setParser(this.getHeader('content-type') || '');
+      if(!parser) {
+        assurePushEnd();
+      }
     }
   });
   newRes.setHeader = logCatch(function(key, value) {
@@ -135,8 +139,11 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (lowerKey === 'connection' || lowerKey === 'transfer-encoding') {
       return;
     }
-    if (key.toLowerCase() === 'content-type' && !ContentType.isHtml(value) && !ContentType.isCSS(value)) {
-      assurePushEnd();
+    if (key.toLowerCase() === 'content-type') {
+      setParser(value);
+      if(!parser) {
+        assurePushEnd();
+      }
     }
     originalSetHeader.apply(res, arguments);
   });
@@ -145,15 +152,13 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       return;
     }
     var gziped = ContentEncoding.isGzip(this.getHeader('content-encoding') || '');
-
-    var contentType = this.getHeader('content-type') || '';
     var _arguments = arguments;
     var _write = function() {
       log('data: ' + url);
       originalWrite.apply(res, _arguments);
     };
 
-    setParser(contentType);
+    setParser(this.getHeader('content-type') || '');
     if (parser) {
       if (res._isOriginalRes && options.mode) {
         parser.write(data, null, function() {
@@ -180,10 +185,9 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       return;
     }
     var _arguments = arguments;
-    var contentType = this.getHeader('content-type') || '';
 
     if (data) {
-      setParser(contentType);
+      setParser(this.getHeader('content-type') || '');
       if (parser) {
         writePromises.push(new Promise(function(resolve) {
           parser.write(data, null, resolve);
