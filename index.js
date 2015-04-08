@@ -159,11 +159,10 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (!gziped) {
       return;
     }
-    var gunzip = zlib.createGunzipStream();
+    var gunzip = zlib.createGunzip();
     var queue = [];
     gunzip.on('data', function(data) {
       queue.push(data);
-      console.log(data.toString());
     });
     writeGunzip = function(data, callback) {
       gunzip.write(data, null, function() {
@@ -194,20 +193,24 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     setParser(this.getHeader('content-type') || '');
     if (parser) {
       setGunzipWriter(this);
-      _unzip(data, function(data) {
-        if (res._isOriginalRes && options.mode) {
-          parser.write(data, null, function() {
-            applyWrite.push(_write.bind(null, _arguments));
-          });
-        } else {
-          writePromises.push(new Promise(function(resolve) {
+
+      writePromises.push(new Promise(function(resolve) {
+        _unzip(data, function(data) {
+          console.log(data.toString());
+          if (res._isOriginalRes && options.mode) {
+            parser.write(data, null, function() {
+              applyWrite.push(_write.bind(null, _arguments));
+              resolve();
+            });
+          } else {
             parser.write(data, null, function() {
               _write();
               resolve();
             });
-          }));
-        }
-      });
+          }
+        });
+      }));
+
 
     } else {
       assurePushEnd();
@@ -344,7 +347,7 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = false;
+  var debug = true;
   var log = debug ? console.log.bind(console) : function() {};
   return function(req, res, next) {
     var url = req.url;

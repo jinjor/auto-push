@@ -33,12 +33,12 @@ function sample3() {
 [sample0, sample1, sample2, sample3][process.argv[2] || 0]();
 
 function _static() {
-  return ecstatic(__dirname + '/public');
-  // return st({
-  //   path: 'public/',
-  //   index: 'index.html',
-  //   gzip: false
-  // });
+  // return ecstatic(__dirname + '/public');
+  return st({
+    path: 'public/',
+    index: 'index.html',
+    // gzip: false
+  });
 };
 function server(options, root) {
   return http2.createServer(options, autoPush(_static()));
