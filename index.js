@@ -175,7 +175,9 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (writeGunzip) {
       writeGunzip(data, callback)
     } else {
-      callback(data);
+      setImmediate(function() {// XXX: for Firefox
+        callback(data);
+      });
     }
   };
 

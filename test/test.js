@@ -71,11 +71,11 @@ function testSingleResource(routes, options, accessURL, responseStrategy, wontPu
     response.statusCode.should.equal(200);
     response.on('data', function(data) {
       push('response-data');
-      pushedRequestCount.should.equal(subresourceCount);
       data.toString().should.equal(routes[accessURL].content);
     });
     response.on('end', function() {
       push('response-end');
+      pushedRequestCount.should.equal(subresourceCount);
       if (wontPush) {
         done();
       }
