@@ -1,7 +1,7 @@
 {
   "name": "auto-push",
   "version": "0.3.3",
-  "description": "A HTTP/2 middleware that automatically pushes sub-resources of HTML",
+  "description": "A HTTP/2 middleware that automatically pushes the associated resources",
   "main": "index.js",
   "scripts": {
     "test": "istanbul cover ./node_modules/mocha/bin/_mocha test/",
