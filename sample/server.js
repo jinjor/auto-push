@@ -38,7 +38,7 @@ function _static() {
     cache: false,
     path: 'public/',
     index: 'index.html',
-    gzip: false
+    // gzip: false
   });
 };
 function server(options, root) {

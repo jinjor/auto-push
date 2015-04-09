@@ -8,7 +8,6 @@ var assert = require('assert');
 var zlib = require('zlib');
 var CssUrlFinder = require('./css-url-finder.js');
 
-
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   var parser = new htmlparser2.Parser({
     onopentag: function(name, attribs) {
@@ -168,7 +167,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       gunzip.write(data, null, function() {
         var _queue = queue;
         queue = [];
-        _queue.forEach(callback);
+        callback(Buffer.concat(_queue));
       });
     };
   };
@@ -176,10 +175,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (writeGunzip) {
       writeGunzip(data, callback)
     } else {
-      // setImmediate(function(){
-        callback(data);
-      // });
-
+      callback(data);
     }
   };
 
@@ -190,12 +186,15 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     var _arguments = arguments;
     var _write = function() {
       log('data: ' + url);
-      originalWrite.apply(res, _arguments);
+      try {
+        originalWrite.apply(res, _arguments);
+      } catch (e) {
+        console.log(e);
+      }
     };
     setParser(this.getHeader('content-type') || '');
     if (parser) {
       setGunzipWriter(this);
-
       writePromises.push(new Promise(function(resolve) {
         _unzip(data, function(data) {
           if (res._isOriginalRes && options.mode) {
@@ -211,8 +210,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           }
         });
       }));
-
-
     } else {
       assurePushEnd();
       _write();
@@ -276,9 +273,6 @@ function defaultPushStrategy(middleware, req, originalRes, next, options, realUR
   if (!originalRes.push) {
     middleware(req, originalRes, next);
     return Promise.resolve();
-  }
-  if(originalRes){
-
   }
   var push = originalRes.push(realURL);
   var pushRequest = createPushRequest(req, realURL);
