@@ -346,50 +346,50 @@ describe('auto-push', function() {
   //   }, null, '/', 0, true, done);
   // });
 
-  it('should push pre-related resources', function(done) {
-    testSingleResource({
-      '/': {
-        content: ''
-      },
-      '/app.js': {
-        content: 'console.log("hello")'
-      }
-    }, {
-      relations: {
-        '/': ['/app.js']
-      }
-    }, '/', 0, false, done);
-  });
-
-  it('should push pre-related resources 2', function(done) {
-    testSingleResource({
-      '/': {
-        content: ''
-      },
-      '/app.js': {
-        content: 'console.log("hello")'
-      }
-    }, {
-      relations: {
-        '/': ['./app.js']
-      }
-    }, '/', 0, false, done);
-  });
-
-  it('should push pre-related resources 3', function(done) {
-    testSingleResource({
-      '/foo/': {
-        content: ''
-      },
-      '/app.js': {
-        content: 'console.log("hello")'
-      }
-    }, {
-      relations: {
-        '/foo/': ['../app.js']
-      }
-    }, '/foo/', 0, false, done);
-  });
+  // it('should push pre-related resources', function(done) {
+  //   testSingleResource({
+  //     '/': {
+  //       content: ''
+  //     },
+  //     '/app.js': {
+  //       content: 'console.log("hello")'
+  //     }
+  //   }, {
+  //     relations: {
+  //       '/': ['/app.js']
+  //     }
+  //   }, '/', 0, false, done);
+  // });
+  //
+  // it('should push pre-related resources 2', function(done) {
+  //   testSingleResource({
+  //     '/': {
+  //       content: ''
+  //     },
+  //     '/app.js': {
+  //       content: 'console.log("hello")'
+  //     }
+  //   }, {
+  //     relations: {
+  //       '/': ['./app.js']
+  //     }
+  //   }, '/', 0, false, done);
+  // });
+  //
+  // it('should push pre-related resources 3', function(done) {
+  //   testSingleResource({
+  //     '/foo/': {
+  //       content: ''
+  //     },
+  //     '/app.js': {
+  //       content: 'console.log("hello")'
+  //     }
+  //   }, {
+  //     relations: {
+  //       '/foo/': ['../app.js']
+  //     }
+  //   }, '/foo/', 0, false, done);
+  // });
 
   it('should recursively push', function(done) {
     testSingleResource({

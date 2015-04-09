@@ -326,6 +326,7 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
 
   return new Promise(function(resolve, reject) {
     if (options.relations[url]) {
+      console.log('options.relation is not an official API!');
       var promises = options.relations[url].map(function(href) {
         return _push(middleware, req, originalRes, next, options, url, href, log, pushed);
       });
