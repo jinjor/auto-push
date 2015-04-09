@@ -55,7 +55,7 @@ var ContentEncoding = {
     return value.toLowerCase().indexOf('gzip') >= 0;
   }
 };
-var logCatch = function(f) {
+function logCatch(f) {
   return function() {
     try {
       f.apply(this, arguments)
@@ -64,6 +64,20 @@ var logCatch = function(f) {
       throw e;
     }
   };
+}
+
+function headerForReverseProxy(res) {
+  if (res.nghttpxPush) { // TODO not pluggable...
+    var value = res.nghttpxPush.map(function(url) {
+      return '<' + url + '>; rel=preload';
+    }).join(',');
+    return ['link', value];
+  } else if (res.modspdyPush) {
+    var value = res.modspdyPush.map(function(url) {
+      return '"' + url + '"';
+    }).join(',');
+    return ['X-Associated-Content', value];
+  }
 };
 
 function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEnd, log) {
@@ -87,19 +101,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       parser = parser || createCssParser(_onResource);
     }
   };
-  var setHeaderForReverseProxy = function(res) {
-    if (res.nghttpxPush) { // TODO not pluggable...
-      var value = res.nghttpxPush.map(function(url) {
-        return '<' + url + '>; rel=preload';
-      }).join(',');
-      originalSetHeader.apply(res, ['link', value]);
-    } else if (res.modspdyPush) {
-      var value = res.modspdyPush.map(function(url) {
-        return '"' + url + '"';
-      }).join(',');
-      originalSetHeader.apply(res, ['X-Associated-Content', value]);
-    }
-  };
+
   var isClosed = function(res) {
     if (res.stream && res.stream.state === 'CLOSED') {
       assurePushEnd();
@@ -111,6 +113,37 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   var assurePushEnd = function() {
     !pushDone && onPushEnd();
     pushDone = true;
+  };
+  var writeGunzip = null;
+  var setGunzipWriter = function(res) {
+    if (writeGunzip) {
+      return;
+    }
+    var gziped = ContentEncoding.isGzip(res.getHeader('content-encoding') || '');
+    if (!gziped) {
+      return;
+    }
+    var gunzip = zlib.createGunzip();
+    var queue = [];
+    gunzip.on('data', function(data) {
+      queue.push(data);
+    });
+    writeGunzip = function(data, callback) {
+      gunzip.write(data, null, function() {
+        var _queue = queue;
+        queue = [];
+        callback(Buffer.concat(_queue));
+      });
+    };
+  };
+  var _unzip = function(data, callback) {
+    if (writeGunzip) {
+      writeGunzip(data, callback)
+    } else {
+      setImmediate(function() { // XXX: for Firefox
+        callback(data);
+      });
+    }
   };
 
   var NewRes = function() {};
@@ -149,39 +182,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     }
     originalSetHeader.apply(res, arguments);
   });
-
-  var writeGunzip = null;
-  var setGunzipWriter = function(res) {
-    if (writeGunzip) {
-      return;
-    }
-    var gziped = ContentEncoding.isGzip(res.getHeader('content-encoding') || '');
-    if (!gziped) {
-      return;
-    }
-    var gunzip = zlib.createGunzip();
-    var queue = [];
-    gunzip.on('data', function(data) {
-      queue.push(data);
-    });
-    writeGunzip = function(data, callback) {
-      gunzip.write(data, null, function() {
-        var _queue = queue;
-        queue = [];
-        callback(Buffer.concat(_queue));
-      });
-    };
-  };
-  var _unzip = function(data, callback) {
-    if (writeGunzip) {
-      writeGunzip(data, callback)
-    } else {
-      setImmediate(function() {// XXX: for Firefox
-        callback(data);
-      });
-    }
-  };
-
   newRes.write = logCatch(function(data) {
     if (isClosed(this)) {
       return;
@@ -189,28 +189,22 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     var _arguments = arguments;
     var _write = function() {
       log('data: ' + url);
-      try {
-        originalWrite.apply(res, _arguments);
-      } catch (e) {
-        console.log(e);
-      }
+      originalWrite.apply(res, _arguments);
     };
     setParser(this.getHeader('content-type') || '');
     if (parser) {
       setGunzipWriter(this);
       writePromises.push(new Promise(function(resolve) {
+        var parseCallback = (res._isOriginalRes && options.mode) ?
+          function() {
+            applyWrite.push(_write);
+            resolve();
+          } : function() {
+            _write();
+            resolve();
+          };
         _unzip(data, function(data) {
-          if (res._isOriginalRes && options.mode) {
-            parser.write(data, null, function() {
-              applyWrite.push(_write);
-              resolve();
-            });
-          } else {
-            parser.write(data, null, function() {
-              _write();
-              resolve();
-            });
-          }
+          parser.write(data, null, parseCallback);
         });
       }));
     } else {
@@ -222,7 +216,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     res.statusCode = s;
   });
   newRes.end = logCatch(function(data) {
-
     if (isClosed(this)) {
       return;
     }
@@ -241,7 +234,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     }
     Promise.all(writePromises).then(function() {
       if (options.mode && res._isOriginalRes) {
-        setHeaderForReverseProxy(res);
+        originalSetHeader.apply(res, headerForReverseProxy(res));
         applyWrite.forEach(function(f) {
           f();
         });
@@ -259,7 +252,6 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
 }
 
 function createPushRequest(req, newURL) {
-
   var NewReq = function() {};
   NewReq.prototype = req;
   var newReq = new NewReq();
@@ -314,12 +306,10 @@ function canHtmlImports(req) {
 }
 
 function handleRequest(middleware, req, originalRes, res, next, url, options, log, pushed) {
-
   if (!originalRes.push && !options.mode) {
     middleware(req, originalRes, next);
     return Promise.resolve();
   }
-
   var _push = pushLogic(options);
 
   return new Promise(function(resolve, reject) {
