@@ -90,6 +90,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   var promises = [];
   var pushDone = false;
   var applyWrite = [];
+  var is304 = res.statusCode === 304;
 
   var _onResource = function() {
     promises.push(onResource.apply(null, arguments));
@@ -187,7 +188,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       return;
     }
     var _arguments = arguments;
-    var _write = function() {
+    var _write = is304 ? function(){} : function() {
       log('data: ' + url);
       originalWrite.apply(res, _arguments);
     };
@@ -240,8 +241,9 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         });
       }
       assurePushEnd();
+
       Promise.all(promises).then(function() {
-        originalEnd.apply(res, _arguments);
+        originalEnd.apply(res, is304 ? [] : _arguments);
         log('end: ' + url);
       });
     }.bind(this));
@@ -257,30 +259,40 @@ function createPushRequest(req, newURL) {
   var newReq = new NewReq();
   newReq.url = newURL;
   newReq.headers = assign({}, req.headers, {
-    'if-modified-since': null,
-    'if-none-match': null
+    // 'if-modified-since': null,
+    // 'if-none-match': null
   });
   newReq.sturl = null; // for 'st' module
   return newReq;
 }
 
-function defaultPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+function defaultPushStrategy(middleware, req, originalRes, res, next, options, realURL, log, pushed) {
   if (!originalRes.push) {
     middleware(req, originalRes, next);
     return Promise.resolve();
   }
+  if(req.headers['if-modified-since'] && req.headers['if-none-match'] && !res._isOriginalRes) {
+    var push304 = true;
+    if(push304) {
+      var push = originalRes.push(realURL);
+      push.statusCode = 304;
+      return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
+    }
+    return Promise.resolve();
+  }
+
   var push = originalRes.push(realURL);
   var pushRequest = createPushRequest(req, realURL);
   return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
 }
 
-function nghttpxPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+function nghttpxPushStrategy(middleware, req, originalRes, res, next, options, realURL, log, pushed) {
   originalRes.nghttpxPush = originalRes.nghttpxPush || [];
   originalRes.nghttpxPush.push(realURL);
   return Promise.resolve();
 }
 
-function modSpdyPushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed) {
+function modSpdyPushStrategy(middleware, req, originalRes, res, next, options, realURL, log, pushed) {
   originalRes.modspdyPush = originalRes.modspdyPush || [];
   originalRes.modspdyPush.push(realURL);
   return Promise.resolve();
@@ -288,12 +300,12 @@ function modSpdyPushStrategy(middleware, req, originalRes, next, options, realUR
 
 function pushLogic(options) {
   var pushStrategy = options.mode === 'nghttpx' ? nghttpxPushStrategy : (options.mode === 'mod_spdy' ? modSpdyPushStrategy : defaultPushStrategy);
-  return function(middleware, req, originalRes, next, options, url, href, log, pushed) {
+  return function(middleware, req, originalRes, res, next, options, url, href, log, pushed) {
     var realURL = Url.resolve(url, href);
     if (!pushed[realURL]) {
       log('pushed: ' + realURL);
       pushed[realURL] = true;
-      return pushStrategy(middleware, req, originalRes, next, options, realURL, log, pushed);
+      return pushStrategy(middleware, req, originalRes, res, next, options, realURL, log, pushed);
     } else {
       return Promise.resolve();
     }
@@ -326,9 +338,12 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         } else if (href.indexOf('//') === 0) {
           return;
         }
-        return _push(middleware, req, originalRes, next, options, url, href, log, pushed);
+        return _push(middleware, req, originalRes, res, next, options, url, href, log, pushed);
       };
-      var newRes = pipeToParser(options, res, onResource, canHtmlImports(req), url, resolve, log);
+      var newRes = pipeToParser(options, res, onResource, canHtmlImports(req), url, function(){
+        log('pushed-children: ' + url);
+        resolve();
+      }, log);
       middleware(req, newRes, next);
     }
   });
@@ -343,7 +358,7 @@ var autoPush = function(middleware, options) {
   var log = debug ? console.log.bind(console) : function() {};
   return function(req, res, next) {
     var url = req.url;
-    log(req.method + ' ' + url);
+    log('\n' + req.method + ' ' + url);
     res._isOriginalRes = true;
     handleRequest(middleware, req, res, res, next, url, options, log, {});
   };

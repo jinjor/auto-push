@@ -14,6 +14,7 @@ var options = {
 
 function sample0() {
   http2.createServer(options, autoPush(_static())).listen(8443);
+  // http2.createServer(options, _static()).listen(8443);
 }
 
 function sample1() {
@@ -33,17 +34,22 @@ function sample3() {
 [sample0, sample1, sample2, sample3][process.argv[2] || 0]();
 
 function _static() {
-  // return ecstatic(__dirname + '/public');
-  return st({
-    cache: false,
-    path: 'public/',
-    index: 'index.html',
-    gzip: false
+  return ecstatic({
+    root: __dirname + '/public',
+    cache: 3600,
   });
+  // return st({
+  //   // cache: false,
+  //   path: 'public/',
+  //   index: 'index.html',
+  //   gzip: false
+  // });
 };
+
 function server(options, root) {
   return http2.createServer(options, autoPush(_static()));
 };
+
 function h1LocalProxy(port) {
   return autoPush(h1proxy(port));
 };
