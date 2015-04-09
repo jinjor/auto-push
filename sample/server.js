@@ -35,9 +35,10 @@ function sample3() {
 function _static() {
   // return ecstatic(__dirname + '/public');
   return st({
+    cache: false,
     path: 'public/',
     index: 'index.html',
-    // gzip: false
+    gzip: false
   });
 };
 function server(options, root) {

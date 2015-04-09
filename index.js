@@ -176,7 +176,10 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (writeGunzip) {
       writeGunzip(data, callback)
     } else {
-      callback(data);
+      // setImmediate(function(){
+        callback(data);
+      // });
+
     }
   };
 
@@ -189,17 +192,15 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       log('data: ' + url);
       originalWrite.apply(res, _arguments);
     };
-
     setParser(this.getHeader('content-type') || '');
     if (parser) {
       setGunzipWriter(this);
 
       writePromises.push(new Promise(function(resolve) {
         _unzip(data, function(data) {
-          console.log(data.toString());
           if (res._isOriginalRes && options.mode) {
             parser.write(data, null, function() {
-              applyWrite.push(_write.bind(null, _arguments));
+              applyWrite.push(_write);
               resolve();
             });
           } else {
@@ -221,6 +222,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     res.statusCode = s;
   });
   newRes.end = logCatch(function(data) {
+
     if (isClosed(this)) {
       return;
     }
@@ -237,7 +239,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         }));
       }
     }
-    Promise.all(promises).then(function() {
+    Promise.all(writePromises).then(function() {
       if (options.mode && res._isOriginalRes) {
         setHeaderForReverseProxy(res);
         applyWrite.forEach(function(f) {
@@ -245,7 +247,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         });
       }
       assurePushEnd();
-      Promise.all(writePromises).then(function() {
+      Promise.all(promises).then(function() {
         originalEnd.apply(res, _arguments);
         log('end: ' + url);
       });
@@ -274,6 +276,9 @@ function defaultPushStrategy(middleware, req, originalRes, next, options, realUR
   if (!originalRes.push) {
     middleware(req, originalRes, next);
     return Promise.resolve();
+  }
+  if(originalRes){
+
   }
   var push = originalRes.push(realURL);
   var pushRequest = createPushRequest(req, realURL);
@@ -347,7 +352,7 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = true;
+  var debug = false;
   var log = debug ? console.log.bind(console) : function() {};
   return function(req, res, next) {
     var url = req.url;
