@@ -102,6 +102,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
   };
   var isClosed = function(res) {
     if (res.stream && res.stream.state === 'CLOSED') {
+      assurePushEnd();
       log('ignored: ' + url);
       return true;
     }
