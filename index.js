@@ -358,7 +358,7 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = true;
+  var debug = false;
   var log = debug ? function(str) {
     // console.log(str[str.length - 1] === '/' ? colors.cyan(str) : str);
     console.log(str);
