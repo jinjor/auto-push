@@ -8,6 +8,7 @@
     "coveralls": "cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
   "dependencies": {
+    "colors": "^1.0.3",
     "htmlparser2": "^3.8.2",
     "object-assign": "^2.0.0",
     "through2": "^0.6.3"

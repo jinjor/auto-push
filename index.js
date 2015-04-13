@@ -6,7 +6,9 @@ var assign = require('object-assign');
 var Url = require('url');
 var assert = require('assert');
 var zlib = require('zlib');
+var colors = require('colors');
 var CssUrlFinder = require('./css-url-finder.js');
+
 
 function createHtmlParser(onResource, onEnd, enableHtmlImports) {
   var parser = new htmlparser2.Parser({
@@ -55,6 +57,7 @@ var ContentEncoding = {
     return value.toLowerCase().indexOf('gzip') >= 0;
   }
 };
+
 function logCatch(f) {
   return function() {
     try {
@@ -111,8 +114,8 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     }
     return false;
   };
-  var assurePushEnd = function() {
-    !pushDone && onPushEnd();
+  var assurePushEnd = function(resourceCount) {
+    !pushDone && onPushEnd(resourceCount);
     pushDone = true;
   };
   var writeGunzip = null;
@@ -166,7 +169,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       originalWriteHead.apply(res, _arguments);
       setParser(this.getHeader('content-type') || '');
       if (!parser) {
-        assurePushEnd();
+        // assurePushEnd(0);
       }
     }
   });
@@ -178,7 +181,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
     if (key.toLowerCase() === 'content-type') {
       setParser(value);
       if (!parser) {
-        assurePushEnd();
+        assurePushEnd(0);
       }
     }
     originalSetHeader.apply(res, arguments);
@@ -188,7 +191,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
       return;
     }
     var _arguments = arguments;
-    var _write = is304 ? function(){} : function() {
+    var _write = is304 ? function() {} : function() {
       log('data: ' + url);
       originalWrite.apply(res, _arguments);
     };
@@ -209,7 +212,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
         });
       }));
     } else {
-      assurePushEnd();
+      assurePushEnd(0);
       _write();
     }
   });
@@ -240,7 +243,7 @@ function pipeToParser(options, res, onResource, enableHtmlImports, url, onPushEn
           f();
         });
       }
-      assurePushEnd();
+      assurePushEnd(promises.length);
 
       Promise.all(promises).then(function() {
         originalEnd.apply(res, is304 ? [] : _arguments);
@@ -271,9 +274,9 @@ function defaultPushStrategy(middleware, req, originalRes, res, next, options, r
     middleware(req, originalRes, next);
     return Promise.resolve();
   }
-  if(req.headers['if-modified-since'] && req.headers['if-none-match'] && !res._isOriginalRes) {
+  if (req.headers['if-modified-since'] && req.headers['if-none-match'] && !res._isOriginalRes) {
     var push304 = true;
-    if(push304) {
+    if (push304) {
       var push = originalRes.push(realURL);
       push.statusCode = 304;
       return handleRequest(middleware, pushRequest, originalRes, push, next, realURL, options, log, pushed);
@@ -341,8 +344,8 @@ function handleRequest(middleware, req, originalRes, res, next, url, options, lo
         }
         return _push(middleware, req, originalRes, res, next, options, url, href, log, pushed);
       };
-      var newRes = pipeToParser(options, res, onResource, canHtmlImports(req), url, function(){
-        log('pushed-children: ' + url);
+      var newRes = pipeToParser(options, res, onResource, canHtmlImports(req), url, function(resourceCount) {
+        resourceCount && log('pushed-children(' + resourceCount + '): ' + url);
         resolve();
       }, log);
       middleware(req, newRes, next);
@@ -355,8 +358,11 @@ var autoPush = function(middleware, options) {
     relations: {}
   }, options || {});
 
-  var debug = false;
-  var log = debug ? console.log.bind(console) : function() {};
+  var debug = true;
+  var log = debug ? function(str) {
+    // console.log(str[str.length - 1] === '/' ? colors.cyan(str) : str);
+    console.log(str);
+  } : function() {};
   return function(req, res, next) {
     var url = req.url;
     log('\n' + req.method + ' ' + url);
